@@ -8,11 +8,11 @@
       },
       {
         "Path": "SmartX.Web\\SmartX.Web.csproj",
-        "Action": "Start"
+        "Action": "StartWithoutDebugging"
       },
       {
         "Path": "SmartX.Simulator\\SmartX.Simulator.csproj",
-        "Action": "Start"
+        "Action": "StartWithoutDebugging"
       }
     ]
   }
