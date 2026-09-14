@@ -1,0 +1,44 @@
+# Brings the whole gateway up with one command: docker compose up --build
+# Everything talks plain http inside compose, so theres no development
+# certificate to trust before the containers will speak to each other.
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: SmartX.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # The cors origins only live in appsettings.Development.json, so without
+      # this the allowed list comes up empty and every call from the browser is
+      # blocked.
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Http only. Naming an https port here would switch UseHttpsRedirection
+      # back on and send the browser to a port nothing is listening on.
+      - ASPNETCORE_HTTP_PORTS=8080
+      # In compose the client is served from 8081 rather than the dotnet run
+      # port, so that origin has to be allowed through. The double underscore is
+      # how .NET maps an environment variable onto the first entry of the
+      # Cors:AllowedOrigins array.
+      - Cors__AllowedOrigins__0=http://localhost:8081
+
+  web:
+    build:
+      context: .
+      dockerfile: SmartX.Web/Dockerfile
+    ports:
+      - "8081:80"
+
+  simulator:
+    build:
+      context: .
+      dockerfile: SmartX.Simulator/Dockerfile
+    depends_on:
+      - api
+    restart: unless-stopped
+    # depends_on waits for the api container to start, not for it to be
+    # listening, and the simulator gives up if its first call fails. Waiting a
+    # few seconds is what closes that gap.
+    entrypoint: ["/bin/sh", "-c", "sleep 15 && dotnet SmartX.Simulator.dll http://api:8080/"]
