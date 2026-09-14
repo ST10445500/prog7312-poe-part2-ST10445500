@@ -5,7 +5,7 @@
 <PageTitle>Fleet - Smart-X</PageTitle>
 
 <PageHeader Title="Fleet"
-            Blurb="Every device registered with the gateway, with the reading it sent last and the Signal Trace ribbon showing how it has been behaving.">
+            Blurb="Every device on this gateway and what it last reported. The ribbon covers the past four minutes.">
     <IngestionNav />
 </PageHeader>
 
@@ -14,7 +14,7 @@
 @if (_registerSucceeded)
 {
     <div class="alert alert-success">
-        Sensor registered. Put it somewhere on the <a href="ingestion/deployment">deployment</a> page.
+        Device added. Give it a location on the <a href="ingestion/deployment">deployment</a> page so you can find it later.
     </div>
 }
 
@@ -25,7 +25,7 @@
 else if (_sensors is { Count: 0 })
 {
     <EmptyState>
-        No sensors registered yet. Use the form below to add the first one.
+        No devices on this gateway yet. Add the first one below.
     </EmptyState>
 }
 else if (_sensors != null)
@@ -41,11 +41,11 @@ else if (_sensors != null)
         }
     </div>
 
-    <div class="table-responsive mb-4">
+    <div class="table-responsive">
         <table class="table table-hover align-middle">
             <thead>
                 <tr>
-                    <th>Sensor</th>
+                    <th>Device</th>
                     <th>Mac Address</th>
                     <th>Location</th>
                     <th>Category</th>
@@ -79,16 +79,20 @@ else if (_sensors != null)
             </tbody>
         </table>
     </div>
+
+    <div class="mb-4">
+        <SignalTraceLegend />
+    </div>
 }
 
 <div class="row g-3">
     <div class="col-12 col-lg-6">
         <div class="card h-100">
             <div class="card-body">
-                <h2 class="h5 card-title">Register a sensor</h2>
+                <h2 class="h5 card-title">Add a device</h2>
                 <p class="text-muted small">
-                    The gateway only accepts readings from a device it already knows,
-                    so a new sensor is registered by its mac address first.
+                    A device is identified by its MAC address. Readings from an address
+                    this gateway does not know get rejected.
                 </p>
 
                 <EditForm Model="_newSensor" OnValidSubmit="RegisterAsync">
@@ -122,8 +126,8 @@ else if (_sensors != null)
 
                     <BusyButton Type="submit"
                                 CssClass="btn btn-primary mt-3"
-                                Label="Register"
-                                BusyLabel="Registering..."
+                                Label="Add device"
+                                BusyLabel="Adding..."
                                 Busy="_isSubmitting" />
                 </EditForm>
             </div>
@@ -133,16 +137,15 @@ else if (_sensors != null)
     <div class="col-12 col-lg-6">
         <div class="card h-100">
             <div class="card-body">
-                <h2 class="h5 card-title">Record a test reading</h2>
+                <h2 class="h5 card-title">Send a test reading</h2>
                 <p class="text-muted small">
-                    The simulator reports for the fleet on its own, and this posts one reading
-                    by hand through the same <code>/api/telemetry</code> endpoint it and a real
-                    device both use.
+                    Push one reading to a device to check it is wired up. It is recorded
+                    the same way the device's own readings are.
                 </p>
 
                 @if (_sensors is not { Count: > 0 })
                 {
-                    <p class="text-muted mb-0">Register a sensor first.</p>
+                    <p class="text-muted mb-0">Add a device first.</p>
                 }
                 else
                 {
@@ -157,11 +160,11 @@ else if (_sensors != null)
 
                     <div class="row g-3">
                         <div class="col-12 col-sm-7">
-                            <label class="form-label">Sensor</label>
+                            <label class="form-label">Device</label>
                             <select class="form-select" @bind="_selectedMac">
                                 @foreach (var sensor in _sensors)
                                 {
-                                    <option value="@sensor.MacAddress">@sensor.MacAddress (@sensor.Category)</option>
+                                    <option value="@sensor.MacAddress">@SensorFormatting.DescribeSensor(sensor)</option>
                                 }
                             </select>
                         </div>
@@ -195,8 +198,8 @@ else if (_sensors != null)
                     </div>
 
                     <BusyButton CssClass="btn btn-primary mt-3"
-                                Label="Record Reading"
-                                BusyLabel="Recording..."
+                                Label="Send reading"
+                                BusyLabel="Sending..."
                                 Busy="_isSubmittingReading"
                                 Disabled="@(ValueProblem != null)"
                                 OnClick="RecordTestReadingAsync" />
@@ -207,7 +210,7 @@ else if (_sensors != null)
 </div>
 
 @code {
-    private const int PollIntervalMilliseconds = 4000;
+    private const int PollIntervalMilliseconds = 1000;
     private const int AlertTimeoutMilliseconds = 3000;
 
     private List<SensorOverview>? _sensors;
@@ -215,7 +218,7 @@ else if (_sensors != null)
     private FleetLoad? _fleetLoad;
     private bool _loadFailed;
     private DateTime? _lastUpdated;
-    private System.Timers.Timer? _pollTimer;
+    private CancellationTokenSource? _polling;
 
     private SensorRegistration _newSensor = new();
     private bool _isSubmitting;
@@ -247,20 +250,30 @@ else if (_sensors != null)
         await LoadRegistrationsAsync();
         await LoadOverviewAsync();
 
-        _pollTimer = new System.Timers.Timer(PollIntervalMilliseconds);
-        _pollTimer.Elapsed += async (_, _) => await InvokeAsync(async () =>
+        _polling = new CancellationTokenSource();
+
+        _ = PollAsync(_polling.Token);
+    }
+
+    private async Task PollAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PollIntervalMilliseconds));
+
+        try
         {
-            await LoadOverviewAsync();
-            StateHasChanged();
-        });
-        _pollTimer.AutoReset = true;
-        _pollTimer.Start();
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await LoadOverviewAsync();
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private async Task LoadRegistrationsAsync()
     {
-        // The overview carries everything a row shows except when the device was
-        // first accepted, and that only changes when something is registered.
         try
         {
             var registrations = await Http.GetFromJsonAsync<List<SensorRegistration>>("api/sensors", ApiJsonOptions.Default);
@@ -278,13 +291,16 @@ else if (_sensors != null)
     {
         try
         {
-            _sensors = await Http.GetFromJsonAsync<List<SensorOverview>>("api/telemetry/overview", ApiJsonOptions.Default);
-            _fleetLoad = await Http.GetFromJsonAsync<FleetLoad>("api/telemetry/load", ApiJsonOptions.Default);
+            var overview = Http.GetFromJsonAsync<List<SensorOverview>>("api/telemetry/overview", ApiJsonOptions.Default);
+            var load = Http.GetFromJsonAsync<FleetLoad>("api/telemetry/load", ApiJsonOptions.Default);
+
+            await Task.WhenAll(overview, load);
+
+            _sensors = await overview;
+            _fleetLoad = await load;
             _loadFailed = false;
             _lastUpdated = DateTime.UtcNow;
 
-            // Keeps a sensor selected in the test-reading form once the fleet has
-            // loaded, rather than leaving the dropdown on a blank first option.
             if (string.IsNullOrEmpty(_selectedMac) && _sensors is { Count: > 0 })
             {
                 _selectedMac = _sensors[0].MacAddress;
@@ -320,7 +336,7 @@ else if (_sensors != null)
             }
             else
             {
-                _registerError = "The gateway rejected that registration.";
+                _registerError = "That device could not be added.";
             }
         }
         catch (HttpRequestException)
@@ -342,8 +358,7 @@ else if (_sensors != null)
             return;
         }
 
-        // Without this render the flag would be set and cleared inside one pass,
-        // so the alert would never actually appear.
+        // A render has to land between setting this and clearing it.
         StateHasChanged();
         await Task.Delay(AlertTimeoutMilliseconds);
         _registerSucceeded = false;
@@ -399,7 +414,8 @@ else if (_sensors != null)
 
     public void Dispose()
     {
-        _pollTimer?.Dispose();
+        _polling?.Cancel();
+        _polling?.Dispose();
     }
 
     private record TestReading(string MacAddress, double? Value, bool? State);

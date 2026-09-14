@@ -11,11 +11,11 @@
         <span class="tree-handle" draggable="true" @ondragstart="DragStartAsync" @ondragend="DragEnd">&#9776;</span>
     }
 
-    <input class="form-control form-control-sm" style="max-width: 220px;" value="@Node.Name" @onchange="NameChangedAsync" />
+    <input class="form-control form-control-sm field-name" value="@Node.Name" @onchange="NameChangedAsync" />
 
     @if (Node.IsSensor)
     {
-        <input class="form-control form-control-sm font-monospace" style="max-width: 240px;"
+        <input class="form-control form-control-sm font-monospace field-narrow"
                list="@MacListId" value="@Node.SensorMacAddress" @onchange="MacChangedAsync" />
     }
     else
@@ -87,8 +87,6 @@
 
     private bool _isDropTarget;
 
-    // Which gap under this node is currently being dragged over. Only one can be,
-    // so the child it sits above is enough to say which.
     private DeploymentNode? _gapBefore;
     private bool _gapAtEnd;
 
@@ -112,7 +110,6 @@
 
     private void DragEnter()
     {
-        // A sensor is a leaf, so it never lights up as somewhere to drop into.
         _isDropTarget = !Node.IsSensor;
     }
 
@@ -125,8 +122,6 @@
     {
         _isDropTarget = false;
 
-        // The page owns the move, because taking a node out of one parent and
-        // putting it under another reaches further than this component can see.
         await OnDropInto.InvokeAsync(Node);
     }
 
@@ -138,8 +133,6 @@
 
     private async Task MacChangedAsync(ChangeEventArgs e)
     {
-        // Clearing the address turns the node back into a zone, because that is
-        // exactly what DeploymentNode.IsSensor keys off.
         Node.SensorMacAddress = e.Value?.ToString();
         await OnChanged.InvokeAsync();
     }

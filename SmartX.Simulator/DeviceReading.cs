@@ -8,7 +8,7 @@
 namespace SmartX.Simulator
 {
     //holds one reading in the shape the gateway expects a device to post
-    //the simulator declares its own copy because it is a separate device, not part of the api
+    //declared here too, because the simulator is a separate device
     public class DeviceReading
     {
         //identity of the device sending the reading

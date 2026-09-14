@@ -21,8 +21,7 @@ namespace SmartX.Api.Services
         //registers a sensor and returns false if the mac address is already taken
         public bool TryRegister(SensorRegistration sensor)
         {
-            // Mac addresses are not case sensitive, so the same device typed in
-            // upper or lower case must not be able to register twice.
+            // Mac addresses are not case sensitive, so one device cannot register twice.
             var key = sensor.MacAddress.ToUpperInvariant();
             sensor.MacAddress = key;
 
@@ -34,13 +33,7 @@ namespace SmartX.Api.Services
         //retrieves every sensor registered with the gateway, in deployment order
         public List<SensorRegistration> GetAll()
         {
-            // A ConcurrentDictionary hands its values back in whatever order it
-            // happens to hold them, which left the fleet table, the dashboard cards
-            // and every sensor dropdown in a jumbled order. Sorting here means each
-            // caller does not have to remember to.
-            // Zone, room and node read the way someone would walk the building. A
-            // mac address sorts just as reliably but says nothing about where a
-            // sensor is, so it is only the tie breaker.
+            // A ConcurrentDictionary returns values in no order, and callers should not have to sort.
             return _sensors.Values
                 .OrderBy(sensor => sensor.Location.Zone, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(sensor => sensor.Location.Room, StringComparer.OrdinalIgnoreCase)

@@ -13,7 +13,7 @@ using SmartX.Shared.Models;
 
 namespace SmartX.Api.Controllers
 {
-    //handles files attached to a sensor, such as config files, deployment photos and hardware logs
+    //handles files attached to a sensor, usually configs and photos
     [ApiController]
     [Route("api/sensors/{macAddress}/attachments")]
     public class AttachmentsController : ControllerBase
@@ -34,7 +34,7 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
-        //accepts a file and attaches it to a sensor, encrypting it on the way to disk
+        //attaches a file to a sensor, encrypting it on the way to disk
         [HttpPost]
         [RequestSizeLimit(MaxUploadBytes)]
         public async Task<ActionResult<AttachmentSummary>> Upload(string macAddress, IFormFile file, CancellationToken token)
@@ -66,8 +66,7 @@ namespace SmartX.Api.Controllers
                 ContentType = file.ContentType,
                 UploadedAt = DateTime.UtcNow,
 
-                // The stored name is generated rather than taken from the upload, so
-                // a file called ../../something cannot escape the uploads folder.
+                // A generated name stops an upload escaping the uploads folder.
                 StoredFileName = $"{Guid.NewGuid():N}.bin"
             };
 
@@ -80,15 +79,12 @@ namespace SmartX.Api.Controllers
 
                 attachment.SizeInBytes = await _encryption.EncryptToAsync(source, destination, token);
 
-                // The stored copy is always larger than the original: sixteen bytes
-                // of iv in front, then the ciphertext padded up to a whole number
-                // of aes blocks.
+                // Sixteen bytes of iv, then ciphertext padded to whole aes blocks.
                 attachment.StoredSizeInBytes = destination.Length;
             }
             catch (Exception)
             {
-                // A half written file is worse than no file, so it does not get left
-                // behind for a later download to trip over.
+                // A half written file is worse than none.
                 DeleteQuietly(path);
                 throw;
             }
@@ -140,8 +136,7 @@ namespace SmartX.Api.Controllers
                 return NotFound("The encrypted copy of that file is no longer on disk.");
             }
 
-            // Decrypting straight onto the response body keeps the file out of memory
-            // on the way out too.
+            // Decrypting onto the response keeps the file out of memory.
             Response.ContentType = attachment.ContentType;
             Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
             {

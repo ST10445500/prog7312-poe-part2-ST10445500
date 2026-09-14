@@ -4,7 +4,7 @@
 <PageTitle>Device Files - Smart-X</PageTitle>
 
 <PageHeader Title="Device Files"
-            Blurb="Config files, deployment photos or hardware logs attached to a sensor profile. The gateway encrypts them on the way in, so nothing sits on disk in the clear.">
+            Blurb="Paperwork filed against a device, usually a calibration certificate or an install photo. Encrypted at rest. 25 MB a file.">
     <IngestionNav />
 </PageHeader>
 
@@ -13,7 +13,7 @@
 @if (_sensors is { Count: 0 })
 {
     <EmptyState>
-        No sensors registered yet. <a href="ingestion/fleet">Register one</a> before attaching files.
+        No devices on this gateway yet. <a href="ingestion/fleet">Add one</a> before attaching documents.
     </EmptyState>
 }
 else
@@ -21,17 +21,19 @@ else
     <div class="card mb-4">
         <div class="card-body">
             <div class="mb-3">
-                <label class="form-label">Sensor</label>
+                <label class="form-label">Device</label>
                 <select class="form-select field-wide" value="@_attachmentsMac" @onchange="OnSensorChangedAsync">
-                    @if (_sensors != null)
+                    @foreach (var sensor in SensorsByName)
                     {
-                        @foreach (var sensor in _sensors)
-                        {
-                            <option value="@sensor.MacAddress">@sensor.MacAddress (@sensor.Category)</option>
-                        }
+                        <option value="@sensor.MacAddress">@SensorFormatting.DescribeSensor(sensor)</option>
                     }
                 </select>
             </div>
+
+            @if (SelectedSensor != null)
+            {
+                <h2 class="h6">Documents on @SensorFormatting.DescribeSensor(SelectedSensor)</h2>
+            }
 
             @if (_attachments == null)
             {
@@ -39,7 +41,7 @@ else
             }
             else if (_attachments.Count == 0)
             {
-                <div class="text-center text-muted py-4">No files attached to this sensor yet.</div>
+                <div class="text-center text-muted py-4">Nothing attached to this device yet.</div>
             }
             else
             {
@@ -47,7 +49,7 @@ else
                     <table class="table table-hover align-middle">
                         <thead>
                             <tr>
-                                <th>File</th>
+                                <th>Document</th>
                                 <th>Size</th>
                                 <th>Uploaded</th>
                                 <th></th>
@@ -63,7 +65,7 @@ else
                                     <td class="text-end">
                                         @if (_pendingDeleteId == attachment.Id)
                                         {
-                                            <span class="text-muted small me-2">Delete this file?</span>
+                                            <span class="text-muted small me-2">Delete permanently?</span>
                                             <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDeleteAsync(attachment.Id)">Yes, delete</button>
                                             <button class="btn btn-sm btn-outline-secondary" @onclick="CancelDelete">Cancel</button>
                                         }
@@ -84,7 +86,7 @@ else
 
             @if (_uploadSucceeded)
             {
-                <div class="alert alert-success">File uploaded.</div>
+                <div class="alert alert-success">Document attached.</div>
             }
             @if (_attachmentError != null)
             {
@@ -93,12 +95,12 @@ else
 
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-md-8">
-                    <label class="form-label">Attach a file</label>
+                    <label class="form-label">Attach a document</label>
                     <InputFile class="form-control" OnChange="OnFileSelected" />
                 </div>
                 <div class="col-12 col-md-4">
-                    <BusyButton Label="Upload"
-                                BusyLabel="Uploading..."
+                    <BusyButton Label="Attach"
+                                BusyLabel="Attaching..."
                                 Busy="_isUploading"
                                 Disabled="@(_selectedFile == null)"
                                 OnClick="UploadAsync" />
@@ -123,13 +125,21 @@ else
     private bool _uploadSucceeded;
     private string? _attachmentError;
 
+    //devices sorted by name for the dropdown
+    private List<SensorRegistration> SensorsByName =>
+        _sensors?.OrderBy(sensor => sensor.Location.NodeId, StringComparer.OrdinalIgnoreCase).ToList()
+            ?? new List<SensorRegistration>();
+
+    private SensorRegistration? SelectedSensor =>
+        _sensors?.FirstOrDefault(sensor => sensor.MacAddress == _attachmentsMac);
+
     protected override async Task OnInitializedAsync()
     {
         await LoadSensorsAsync();
 
-        if (_sensors is { Count: > 0 })
+        if (SensorsByName.Count > 0)
         {
-            _attachmentsMac = _sensors[0].MacAddress;
+            _attachmentsMac = SensorsByName[0].MacAddress;
         }
 
         await LoadAttachmentsAsync();
@@ -155,8 +165,7 @@ else
 
     private async Task LoadAttachmentsAsync()
     {
-        // A confirm left open against the old list would point at a file that is
-        // no longer on screen.
+        // A confirm left open would point at a file that is no longer listed.
         _pendingDeleteId = null;
 
         if (string.IsNullOrEmpty(_attachmentsMac))
@@ -199,7 +208,6 @@ else
         {
             var response = await Http.DeleteAsync($"api/sensors/{_attachmentsMac}/attachments/{attachmentId}");
 
-            // Without this the file simply stayed in the list and nothing said why.
             if (!response.IsSuccessStatusCode)
             {
                 _attachmentError = await response.Content.ReadAsStringAsync();
@@ -285,8 +293,7 @@ else
             return;
         }
 
-        // Without this render the flag would be set and cleared inside one pass,
-        // so the alert would never actually appear.
+        // The alert needs a render between being set and being cleared.
         StateHasChanged();
         await Task.Delay(AlertTimeoutMilliseconds);
         _uploadSucceeded = false;

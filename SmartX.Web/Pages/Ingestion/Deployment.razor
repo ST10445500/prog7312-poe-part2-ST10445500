@@ -5,7 +5,7 @@
 <PageTitle>Deployment - Smart-X</PageTitle>
 
 <PageHeader Title="Deployment"
-            Blurb="The site, zone and room tree the fleet sits in. The gateway walks the whole thing before it keeps anything, so a broken branch is caught at the level it goes wrong.">
+            Blurb="Where each device physically sits, from site down to room. Nothing saves until the whole tree checks out.">
     <IngestionNav />
 </PageHeader>
 
@@ -28,9 +28,9 @@
             @if (UnplacedSensors.Count > 0)
             {
                 <div class="alert alert-secondary">
-                    <strong>Waiting to be placed</strong>
+                    <strong>No location yet</strong>
                     <p class="small mb-2">
-                        Registered with the gateway but not in the deployment yet. Drag one
+                        These devices are on the gateway but have not been placed. Drag one
                         onto a zone below, or click it to drop it at the top level.
                     </p>
 
@@ -52,12 +52,12 @@
             @if (_jsonMode)
             {
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                    <span class="text-muted small">Try a sample tree:</span>
+                    <span class="text-muted small">Load an example:</span>
                     <button class="btn btn-sm btn-outline-secondary" @onclick="LoadBrokenExample">
-                        Broken tree
+                        Tree with errors
                     </button>
                     <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDeepExample">
-                        40 levels deep
+                        Nested 40 levels
                     </button>
                 </div>
 
@@ -92,8 +92,8 @@
 
             <div class="d-flex flex-wrap gap-2 mt-3">
                 <BusyButton CssClass="btn btn-outline-primary"
-                            Label="Validate"
-                            BusyLabel="Validating..."
+                            Label="Check"
+                            BusyLabel="Checking..."
                             Busy="_isValidating"
                             OnClick="ValidateEditAsync" />
 
@@ -108,7 +108,7 @@
                 @if (!_editValidated)
                 {
                     <span class="text-muted small align-self-center">
-                        Validate the tree before it can be saved.
+                        Check the deployment before it can be saved.
                     </span>
                 }
             </div>
@@ -117,11 +117,11 @@
             {
                 <div class="mt-3">
                     <span class="badge @(_editResult.IsValid ? "bg-success" : "bg-danger") me-2">
-                        @(_editResult.IsValid ? "Valid" : "Rejected")
+                        @(_editResult.IsValid ? "Ready to save" : "Not saved")
                     </span>
                     <span class="badge bg-secondary me-2">@_editResult.NodesChecked nodes checked</span>
                     <span class="badge bg-secondary me-2">deepest level @_editResult.DeepestLevel</span>
-                    <span class="badge bg-secondary">@_editResult.SensorsFound sensors</span>
+                    <span class="badge bg-secondary">@_editResult.SensorsFound devices placed</span>
 
                     @if (_editResult.Errors.Count > 0)
                     {
@@ -144,7 +144,7 @@
         {
             <DeploymentTreeNode Node="_deploymentTree" />
 
-            <button class="btn btn-primary mt-3" @onclick="StartEditing">Edit deployment</button>
+            <button class="btn btn-primary mt-3" @onclick="StartEditing">Edit layout</button>
         }
         else if (!_loadFailed)
         {
@@ -176,7 +176,7 @@
     private string DefaultMacAddress =>
         _sensors is { Count: > 0 } ? _sensors[0].MacAddress : "AA:BB:CC:DD:EE:FF";
 
-    //the registered sensors the tree being edited does not place anywhere
+    //registered devices the edited tree does not place anywhere
     private List<SensorRegistration> UnplacedSensors
     {
         get
@@ -231,7 +231,6 @@
             return;
         }
 
-        // Editing a copy is what lets Cancel simply throw the whole thing away.
         _editTree = DeploymentTreeOperations.Clone(_deploymentTree);
         _editResult = null;
         _editError = null;
@@ -253,16 +252,12 @@
             return;
         }
 
-        // Clicking drops it at the top level, where it is easy to see and then drag
-        // somewhere better. A sensor registered by name has no zone to go back to.
         _editTree.Children.Add(SensorLeafFor(sensor));
         OnEditTreeChanged();
     }
 
     private void StartDraggingUnplaced(SensorRegistration sensor)
     {
-        // The leaf is built here rather than when it lands, so the drop handlers do
-        // not have to care whether what they were given is already in the tree.
         _draggedNode = SensorLeafFor(sensor);
     }
 
@@ -277,8 +272,6 @@
 
     private void OnEditTreeChanged()
     {
-        // A pass describes the tree as it was when it was checked, so changing
-        // anything afterwards has to put Save back out of reach.
         _editResult = null;
         _editValidated = false;
     }
@@ -378,15 +371,12 @@
             }
             else
             {
-                // The gateway checks the tree again before it keeps anything, so a
-                // refusal comes back as the same result shape the validate button
-                // already knows how to show.
                 _editResult = await response.Content.ReadFromJsonAsync<DeploymentValidationResult>(ApiJsonOptions.Default);
                 _editValidated = false;
 
                 if (_editResult == null)
                 {
-                    _editError = "The gateway would not accept that deployment.";
+                    _editError = "That layout could not be saved.";
                 }
             }
         }
@@ -426,8 +416,6 @@
 
     private void ShowBuilder()
     {
-        // Anything typed since the last Apply is dropped on purpose, so there is
-        // never a question of which of the two is the tree being edited.
         _jsonParseError = null;
         _jsonMode = false;
     }
@@ -456,8 +444,6 @@
         _jsonParseError = null;
         _jsonMode = false;
 
-        // Pasted json is a change like any other, so it has to be validated before
-        // it can be saved.
         OnEditTreeChanged();
     }
 }

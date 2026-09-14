@@ -8,28 +8,21 @@ using SmartX.Simulator;
 
 // Program starts the simulator and reports for whatever the gateway has registered.
 
-// The gateway's https profile, the same address the blazor client is pointed at.
+// Same address the blazor client is pointed at.
 const string DefaultBaseUrl = "https://localhost:7002/";
 
-// The demo fleet includes a spare unit that was registered but never powered up,
-// so it is skipped here and shows on the dashboard as a silent sensor.
+// Registered but never powered up. Gives the dashboard something silent to show.
 const string SpareNodeId = "spare-valve";
 
-// Twelve hundred readings per sensor is past the ring buffer's hundred and twenty
-// and past the thousand the batch grid holds before it transfers into the list, so
-// both are exercised straight away.
+// Past the ring buffer's 120 and past the batch grid's 1000. Both get exercised.
 const int BackfillReadings = 1200;
 
-// Backfilled readings are spaced the same as live ones. At thirty seconds apart the
-// health windows are only ten seconds wide, so two windows in every three held no
-// reading and the older half of the ribbon came out striped with silent blocks.
+// Windows are ten seconds wide. Spread these wider and most of them come out empty.
 const int BackfillIntervalSeconds = 3;
 
-// Live readings come in far quicker than the backfill's thirty seconds, because the
-// signal trace ribbon buckets into ten second windows and would otherwise show a
-// gap between most of them.
-const double MinIntervalSeconds = 2;
-const double MaxIntervalSeconds = 5;
+// About a reading a second. Slower than this and the dashboard looks frozen.
+const double MinIntervalSeconds = 1;
+const double MaxIntervalSeconds = 2;
 
 var baseUrl = args.Length > 0 ? args[0] : DefaultBaseUrl;
 var gateway = new GatewayClient(baseUrl);
@@ -44,8 +37,7 @@ try
 }
 catch (HttpRequestException problem)
 {
-	// The api not being up is the usual reason this fails, and the raw socket
-	// error on its own does not say that.
+	// Usually the api is not up, which the socket error does not say.
 	Console.WriteLine($"Could not reach the gateway at {baseUrl}. Is SmartX.Api running?");
 	Console.WriteLine(problem.Message);
 	return;
@@ -88,8 +80,6 @@ foreach (var sensor in reporting)
 		var recordedAt = backfillStart.AddSeconds(index * BackfillIntervalSeconds);
 		batch.Add(generator.Next(sensor.MacAddress, recordedAt));
 
-		// Readings go up in the order they were taken, so the newest one the
-		// gateway holds is genuinely the newest.
 		if (batch.Count < GatewayClient.MaxBatchSize && index < BackfillReadings - 1)
 		{
 			continue;
@@ -108,15 +98,14 @@ foreach (var sensor in reporting)
 		batch.Clear();
 	}
 
-	// A rejection here means the generator produced something the gateway will
-	// not take, which is worth seeing rather than passing over quietly.
+	// A rejection means the generator built something the gateway will not take.
 	var note = rejected > 0 ? $", {rejected} rejected - {firstReason}" : string.Empty;
 	Console.WriteLine($"  {sensor.MacAddress}  {accepted} accepted{note}");
 }
 
 Console.WriteLine("Backfill done.");
 
-// Ctrl-C asks the sensor tasks to stop rather than killing the process mid-post.
+// Ctrl-C asks the sensor tasks to stop, mid-post is not a good place to die.
 using var stopping = new CancellationTokenSource();
 
 Console.CancelKeyPress += (_, pressed) =>
@@ -127,10 +116,7 @@ Console.CancelKeyPress += (_, pressed) =>
 
 Console.WriteLine($"Streaming live readings every {MinIntervalSeconds} to {MaxIntervalSeconds} seconds. Ctrl-C to stop.");
 
-// A task per sensor rather than one loop through them all, so readings genuinely
-// arrive at the same time. That is what puts the per sensor lock in
-// SensorTelemetry and the concurrent dictionary in TelemetryStore under real load
-// instead of only under a unit test.
+// A task each, so readings really do land at once and the locks get exercised.
 var streams = reporting
 	.Select(sensor => StreamSensorAsync(sensor, stopping.Token))
 	.ToList();
@@ -149,8 +135,7 @@ async Task StreamSensorAsync(SensorRegistration sensor, CancellationToken token)
 
 	while (!token.IsCancellationRequested)
 	{
-		// Each sensor waits a slightly different length of time, so the fleet does
-		// not fall into posting all at once on the same beat.
+		// Different wait each time, or the fleet falls into one beat.
 		var seconds = MinIntervalSeconds + (jitter.NextDouble() * (MaxIntervalSeconds - MinIntervalSeconds));
 
 		try
@@ -164,8 +149,7 @@ async Task StreamSensorAsync(SensorRegistration sensor, CancellationToken token)
 		}
 		catch (HttpRequestException problem)
 		{
-			// One device losing the gateway should not take the rest of the fleet
-			// down with it, so it reports the problem and keeps trying.
+			// One device losing the gateway should not stop the others.
 			Console.WriteLine($"  {sensor.MacAddress} could not post: {problem.Message}");
 		}
 	}

@@ -19,15 +19,13 @@ builder.Services.AddSingleton<TelemetryHealth>();
 builder.Services.AddSingleton<AttachmentStore>();
 builder.Services.AddSingleton<AttachmentEncryption>();
 
-// Controllers and JSON
-// The client sends category names, not numbers, so enums need to bind from strings.
+// Category names arrive as strings.
 builder.Services.AddControllers()
 	.AddJsonOptions(options =>
 		options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 
-// The Blazor client runs as its own standalone app, so its origin needs to
-// be allowed in explicitly. Origins come from config, not hardcoded here.
+// The client is a separate app. Its origin comes from config.
 var allowedOrigins = builder.Configuration
 	.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
@@ -39,8 +37,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// The gateway comes up with a small demo facility already registered, so the
-// dashboard has a fleet to draw before any device has reported anything.
+// A small demo facility gives the dashboard something to draw at startup.
 var seededSensors = app.Services.GetRequiredService<SensorStore>();
 DemoFleet.Seed(seededSensors);
 
@@ -55,7 +52,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Has to come before MapControllers, otherwise it just gets ignored.
+// Has to come before MapControllers or it is ignored.
 app.UseCors("SmartXClient");
 
 app.UseAuthorization();

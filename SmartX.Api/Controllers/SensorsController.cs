@@ -35,10 +35,7 @@ namespace SmartX.Api.Controllers
                 return Conflict($"A sensor with mac address {sensor.MacAddress} is already registered.");
             }
 
-            // A registration that already says which zone and room it belongs to is
-            // placed straight away, which is how the demo fleet and anything posting
-            // a full record still end up in the tree. One registered with just a name
-            // is left out of it, and shows up as unplaced for someone to drag in.
+            // A registration with a zone and room is placed now. Name only waits to be dragged in.
             if (!string.IsNullOrWhiteSpace(sensor.Location.Zone) && !string.IsNullOrWhiteSpace(sensor.Location.Room))
             {
                 _deployment.Place(sensor);

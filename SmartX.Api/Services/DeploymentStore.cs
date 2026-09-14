@@ -16,10 +16,7 @@ namespace SmartX.Api.Services
         //what the root of a freshly seeded tree is called
         private const string RootName = "Smart-X Gateway";
 
-        // A tree is a whole graph of objects rather than a single value, so the
-        // lock guards every read and write of it. Handing the live tree out would
-        // let a caller change it, or read it half written, without ever taking
-        // this lock.
+        // A tree is a graph of objects, so the lock covers every read and write.
         private readonly object _lock = new object();
 
         private DeploymentNode _root = new DeploymentNode { Name = RootName };
@@ -52,8 +49,7 @@ namespace SmartX.Api.Services
         public void SeedFromFleet(IEnumerable<SensorRegistration> sensors)
         {
             var zones = sensors
-                // A sensor registered with only a name has no zone to group under,
-                // and grouping on a blank one would build a nameless node.
+                // Grouping on a blank zone would build a nameless node.
                 .Where(sensor => !string.IsNullOrWhiteSpace(sensor.Location.Zone))
                 .GroupBy(sensor => sensor.Location.Zone)
                 .Select(zone => new DeploymentNode
@@ -83,9 +79,7 @@ namespace SmartX.Api.Services
         {
             lock (_lock)
             {
-                // A sensor that is already somewhere in the tree stays where it is.
-                // Otherwise anything moved by hand would be dragged back to the spot
-                // it was first registered at.
+                // Already in the tree means it stays put. Otherwise hand moves get undone.
                 if (Holds(_root, sensor.MacAddress))
                 {
                     return;
@@ -105,11 +99,7 @@ namespace SmartX.Api.Services
         {
             lock (_lock)
             {
-                // The tree is what says where a sensor is. Its registration carries a
-                // zone and room because the brief asks a registration to, so they are
-                // worked out from the tree rather than typed and left to go stale.
-                // The walk starts at the root's children, because the root is the
-                // gateway itself rather than a level of the building.
+                // The tree says where a sensor is, so zone and room are read back off it.
                 foreach (var child in _root.Children)
                 {
                     ApplyLocations(child, new List<string>(), sensors);
@@ -124,9 +114,7 @@ namespace SmartX.Api.Services
         {
             if (node.IsSensor)
             {
-                // The first level under the root is the zone and the one directly above
-                // the sensor is the room. Anything in between is dropped, which loses a
-                // label but never structure, since the tree keeps that.
+                // First level under the root is the zone, the one above the sensor is the room.
                 var zone = ancestors.Count > 0 ? ancestors[0] : string.Empty;
                 var room = ancestors.Count > 0 ? ancestors[^1] : string.Empty;
 
@@ -171,8 +159,6 @@ namespace SmartX.Api.Services
                 return true;
             }
 
-            // Each child is asked the same question, which is what lets a sensor be
-            // found however deep it has been moved.
             return node.Children.Any(child => Holds(child, macAddress));
         }
 

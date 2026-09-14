@@ -46,7 +46,7 @@ namespace SmartX.Shared.Models
         //whether the window was silent, ordinary, or held a sharp change
         public TelemetryStatus Status { get; set; }
 
-        //the biggest change between two readings in the window, or null if there were not two to compare
+        //the biggest change inside the window, or null if there was nothing to compare
         public string? LargestChange { get; set; }
 
         //the newest reading in the window, or null if none arrived

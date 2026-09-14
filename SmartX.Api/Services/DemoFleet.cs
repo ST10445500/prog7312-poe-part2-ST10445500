@@ -19,8 +19,7 @@ namespace SmartX.Api.Services
         {
             foreach (var sensor in Build())
             {
-                // TryRegister leaves an existing mac alone, so anything registered by
-                // hand under the same address keeps the details it was given.
+                // TryRegister leaves an existing mac alone.
                 sensors.TryRegister(sensor);
             }
         }
@@ -43,9 +42,7 @@ namespace SmartX.Api.Services
                 Sensor("AA:BB:CC:DD:EE:07", "Utility", "Main", "meter-main", SensorCategory.PowerConsumption, registeredAt),
                 Sensor("AA:BB:CC:DD:EE:08", "Utility", "Main", "meter-pump", SensorCategory.PowerConsumption, registeredAt),
 
-                // A spare unit that is registered but never powered up. The simulator
-                // leaves it alone on purpose so the dashboard has a genuinely silent
-                // sensor sitting next to the reporting ones.
+                // Registered but never powered up. The simulator skips it.
                 Sensor("AA:BB:CC:DD:EE:09", "Utility", "Store Room", "spare-valve", SensorCategory.Actuator, registeredAt)
             ];
         }

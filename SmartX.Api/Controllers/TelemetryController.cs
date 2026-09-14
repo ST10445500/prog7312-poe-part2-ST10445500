@@ -77,8 +77,7 @@ namespace SmartX.Api.Controllers
             {
                 var reason = TryRecord(readings[index]);
 
-                // One faulty device should not cost the gateway the rest of the
-                // batch, so the bad reading is noted and the loop carries on.
+                // One bad reading should not cost the rest of the batch.
                 if (reason == null)
                 {
                     result.Accepted++;
@@ -133,9 +132,7 @@ namespace SmartX.Api.Controllers
 
             var usage = _telemetry.GetUsage(sensor.MacAddress, sensor.Category);
 
-            // A sensor that is registered but has not reported yet has no counters
-            // at all. Empty ones are handed back so the dashboard can show it
-            // sitting at zero instead of treating it as a missing sensor.
+            // Empty counters, so a sensor that has not reported reads zero and not missing.
             return usage ?? new TelemetryUsage
             {
                 LiveCapacity = SensorTelemetry<bool>.LiveWindowSize
@@ -155,9 +152,7 @@ namespace SmartX.Api.Controllers
                 return NotFound($"No sensor registered with MAC address {macAddress}.");
             }
 
-            // A sensor that is registered but has never reported still gets a full run
-            // of windows back, all of them silent, so the dashboard draws the gap
-            // rather than leaving an empty row where a sensor should be.
+            // A full run of silent windows, so the dashboard draws the gap.
             return _health.Build(sensor, windows, windowSeconds, DateTime.UtcNow);
         }
 
@@ -199,16 +194,14 @@ namespace SmartX.Api.Controllers
                 Location = sensor.Location,
                 LatestReading = usage?.LatestReading,
                 LatestRecordedAt = usage?.LatestRecordedAt,
-                // Building this here, rather than a second call to GetHealth, is what
-                // keeps the overview a single round trip no matter how many sensors
-                // the ribbon has to draw.
+                // Built here to keep the overview a single round trip.
                 Health = _health.Build(sensor, TelemetryHealth.DefaultWindowCount, TelemetryHealth.DefaultWindowSeconds, DateTime.UtcNow)
             };
         }
 
         //..............................................................................//
 
-        //checks one reading and stores it, returning why it was turned away or null if it was kept
+        //checks and stores one reading, returning why it was turned away
         private string? TryRecord(IncomingReading reading)
         {
             if (string.IsNullOrWhiteSpace(reading.MacAddress))
@@ -216,9 +209,7 @@ namespace SmartX.Api.Controllers
                 return "The reading did not say which device it came from.";
             }
 
-            // The gateway only accepts readings from devices it already knows about,
-            // so an unrecognised mac is turned away rather than quietly registering
-            // a new sensor from whatever the reading claimed to be.
+            // Only devices the gateway knows. An unknown mac is turned away.
             var sensor = _sensors.Find(reading.MacAddress);
 
             if (sensor == null)
@@ -276,8 +267,7 @@ namespace SmartX.Api.Controllers
                 return $"A power meter cannot draw {reading.Value} watts.";
             }
 
-            // PowerReading holds whole watts, so a meter reporting a fraction is
-            // rounded rather than refused.
+            // PowerReading holds whole watts, so a fraction is rounded.
             _telemetry.RecordPower(sensor.MacAddress, (int)Math.Round(reading.Value.Value), recordedAt);
             return null;
         }
@@ -308,10 +298,7 @@ namespace SmartX.Api.Controllers
                     {
                         readings.Add(new RecordedReading
                         {
-                            // A moisture percentage is held as a float, and widening it
-                            // turns 40.1 into 40.099998474121094 on the dashboard. The
-                            // sensor is only accurate to a tenth anyway, so it is rounded
-                            // back to what it actually reported.
+                            // Widening the float turns 40.1 into 40.099998474121094 on screen.
                             Value = Math.Round((double)packet.Value.Percent, MoistureDecimals),
                             Reading = packet.Value.ToString(),
                             RecordedAt = packet.RecordedAt

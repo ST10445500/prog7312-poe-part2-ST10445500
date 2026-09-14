@@ -11,7 +11,7 @@ using SmartX.Api.Models.Attachments;
 namespace SmartX.Api.Services
 {
     //keeps track of which files belong to which sensor, and where the encrypted copies live
-    //the descriptions are in memory like everything else, but the files themselves have to be on disk
+    //descriptions in memory, the files themselves on disk
     public class AttachmentStore
     {
         private readonly ConcurrentDictionary<string, List<Attachment>> _bySensor =
@@ -42,8 +42,7 @@ namespace SmartX.Api.Services
         {
             var forSensor = _bySensor.GetOrAdd(attachment.MacAddress, _ => new List<Attachment>());
 
-            // ConcurrentDictionary only protects the dictionary, not the list inside
-            // it, so two uploads for the same sensor still need this lock.
+            // ConcurrentDictionary protects the dictionary, not the list inside it.
             lock (forSensor)
             {
                 forSensor.Add(attachment);
@@ -68,7 +67,7 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
-        //forgets a file attached to a sensor, handing back what was removed so the caller can delete it from disk
+        //forgets a file, handing back what was removed so the caller can delete it
         public Attachment? Remove(string macAddress, string id)
         {
             if (!_bySensor.TryGetValue(macAddress, out var forSensor))

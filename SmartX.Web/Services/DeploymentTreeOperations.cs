@@ -10,7 +10,7 @@ using SmartX.Shared.Models;
 namespace SmartX.Web.Services
 {
     //the walks the deployment editor needs over a tree of any depth
-    //every one of these calls itself on the children, since a tree has no fixed number of levels
+    //each one recurses, because a tree has no fixed number of levels
     public static class DeploymentTreeOperations
     {
         //..............................................................................//
@@ -18,8 +18,6 @@ namespace SmartX.Web.Services
         //builds a copy of a node and everything underneath it
         public static DeploymentNode Clone(DeploymentNode node)
         {
-            // Editing works on a copy so cancelling can simply throw it away rather
-            // than trying to undo whatever was changed.
             return new DeploymentNode
             {
                 Name = node.Name,
@@ -51,9 +49,7 @@ namespace SmartX.Web.Services
                 return false;
             }
 
-            // Detaching is allowed to find nothing. A sensor dragged in from the
-            // unplaced list is a brand new leaf that was never in the tree, so this is
-            // "put it here" rather than strictly "move it".
+            // A device dragged in from the unplaced list was never in the tree.
             Detach(root, node);
 
             zone.Children.Add(node);
@@ -72,10 +68,7 @@ namespace SmartX.Web.Services
 
             Detach(root, node);
 
-            // The index is looked up after the detach on purpose. Taking the node out
-            // first shifts everything after it along, so a position worked out
-            // beforehand would be one place off whenever the node came from earlier
-            // in this same list.
+            // Detaching first shifts the list, so the index has to be read after it.
             var index = before == null ? -1 : zone.Children.IndexOf(before);
 
             if (index < 0)
@@ -95,8 +88,7 @@ namespace SmartX.Web.Services
         //checks whether a node is allowed to end up under this zone
         private static bool CanMove(DeploymentNode node, DeploymentNode zone)
         {
-            // A sensor is a leaf, and dropping a branch inside itself would take the
-            // whole branch out of the tree along with it.
+            // A sensor is a leaf, and a branch cannot be dropped inside itself.
             return !zone.IsSensor && !Contains(node, zone);
         }
 

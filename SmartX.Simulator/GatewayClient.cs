@@ -12,15 +12,13 @@ using SmartX.Shared.Models;
 
 namespace SmartX.Simulator
 {
-    //sends readings to the gateway and reads back the fleet it should be reporting for
+    //sends readings up and reads back the fleet to report for
     public class GatewayClient
     {
         //how many readings the gateway accepts in a single batch
         public const int MaxBatchSize = 500;
 
-        // The gateway sends category names as strings rather than numbers, so this
-        // client needs its own converter. Nothing is shared between the api, the
-        // blazor app and this, so each one has to say it for itself.
+        // Categories come back as strings. Nothing is shared, so this says it again.
         private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
         private readonly HttpClient _http;
@@ -53,7 +51,7 @@ namespace SmartX.Simulator
 
         //..............................................................................//
 
-        //posts a single reading the way a device reports one as it takes it
+        //posts one reading, the way a device reports as it takes them
         public async Task PostReadingAsync(DeviceReading reading, CancellationToken token)
         {
             var response = await _http.PostAsJsonAsync("api/telemetry", reading, JsonOptions, token);

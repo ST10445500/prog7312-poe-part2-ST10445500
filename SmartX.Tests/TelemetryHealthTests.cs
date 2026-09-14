@@ -16,8 +16,7 @@ namespace SmartX.Tests
     {
         private const string KnownMac = "AA:BB:CC:DD:EE:01";
 
-        // Five seconds past midnight sits inside, not on, a ten-second grid line, so
-        // flooring it to the window grid is unambiguous.
+        // Five seconds past midnight sits inside a ten second grid line, not on one.
         private static readonly DateTime Now = new(2026, 1, 1, 0, 0, 5, DateTimeKind.Utc);
         private static readonly DateTime FlooredNow = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 

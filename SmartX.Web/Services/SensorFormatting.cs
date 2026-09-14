@@ -9,10 +9,10 @@ using SmartX.Shared.Models;
 
 namespace SmartX.Web.Services
 {
-    //turns sensor data into the wording the pages show, so every page says it the same way
+    //the wording every page uses for a device
     public static class SensorFormatting
     {
-        //describes where a sensor sits, or says so when it is not in the tree yet
+        //where a device sits, or that it has no place yet
         public static string DescribeLocation(DeploymentLocation location)
         {
             if (string.IsNullOrWhiteSpace(location.Zone))
@@ -30,11 +30,39 @@ namespace SmartX.Web.Services
 
         //..............................................................................//
 
-        //describes the newest reading a sensor sent, or a dash when it has not reported
+        //names a registered device for a dropdown
+        public static string DescribeSensor(SensorRegistration sensor)
+        {
+            return DescribeSensor(sensor.Location.NodeId, sensor.MacAddress, sensor.Category);
+        }
+
+        //..............................................................................//
+
+        //the same wording, for a device that has reported
+        public static string DescribeSensor(SensorOverview sensor)
+        {
+            return DescribeSensor(sensor.Location.NodeId, sensor.MacAddress, sensor.Category);
+        }
+
+        //..............................................................................//
+
+        private static string DescribeSensor(string nodeId, string macAddress, SensorCategory category)
+        {
+            // An unnamed device would otherwise show empty brackets.
+            if (string.IsNullOrWhiteSpace(nodeId))
+            {
+                return $"{macAddress} - {category}";
+            }
+
+            return $"{nodeId} ({macAddress}) - {category}";
+        }
+
+        //..............................................................................//
+
+        //the newest reading, or a dash
         public static string DescribeLatestReading(SensorOverview sensor)
         {
-            // The reading struct's own ToString gives True or False for an actuator,
-            // and the rest of the app talks about valves being open or closed.
+            // ToString gives True or False, and a valve is open or closed.
             if (sensor.Category == SensorCategory.Actuator && sensor.LatestReading != null)
             {
                 return sensor.LatestReading == "True" ? "Open" : "Closed";
@@ -45,11 +73,35 @@ namespace SmartX.Web.Services
 
         //..............................................................................//
 
-        //describes what is wrong with a hand typed reading, or null when it is ready to post
+        //how long ago a device last reported
+        public static string DescribeLastSeen(SensorHealth health)
+        {
+            if (health.SecondsSinceLastReading == null)
+            {
+                return "no readings yet";
+            }
+
+            var seconds = (int)health.SecondsSinceLastReading.Value;
+
+            if (seconds < 60)
+            {
+                return $"{seconds}s ago";
+            }
+
+            if (seconds < 3600)
+            {
+                return $"{seconds / 60}m ago";
+            }
+
+            return $"{seconds / 3600}h ago";
+        }
+
+        //..............................................................................//
+
+        //what is wrong with a typed reading, or null if it is fine
         public static string? DescribeReadingProblem(SensorCategory? category, double? value)
         {
-            // An actuator carries a state rather than a number, and the dropdown
-            // cannot be left empty, so there is nothing to check.
+            // An actuator carries a state, and the dropdown cannot be empty.
             if (category == SensorCategory.Actuator)
             {
                 return null;
@@ -60,8 +112,7 @@ namespace SmartX.Web.Services
                 return "Enter a reading first.";
             }
 
-            // These are the same bounds TelemetryController enforces, checked here
-            // so the gateway never has to turn the reading away.
+            // Same bounds TelemetryController enforces.
             if (category == SensorCategory.Environmental && value is < 0 or > 100)
             {
                 return "A moisture reading has to be between 0 and 100 percent.";

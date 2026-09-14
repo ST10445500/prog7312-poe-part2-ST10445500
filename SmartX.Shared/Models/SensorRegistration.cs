@@ -34,11 +34,7 @@ namespace SmartX.Shared.Models
         //checks the location fields, since blazor does not validate nested objects on its own
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
-            // Blazor's DataAnnotationsValidator only checks the properties on this
-            // class, not the ones inside Location, so those checks have to happen here.
-            // Zone and room are not asked for. A sensor is registered with a name and
-            // then dragged into the deployment tree, and saving that tree is what
-            // fills the two of them in.
+            // DataAnnotationsValidator does not look inside Location, so this does.
             if (string.IsNullOrWhiteSpace(Location.NodeId))
             {
                 yield return new ValidationResult("Name is required.", new[] { nameof(Location) });
@@ -49,11 +45,10 @@ namespace SmartX.Shared.Models
     //..............................................................................//
 
     //the zone, room and node a sensor is deployed at
-    //the node id is the sensor's name, and is the only one given at registration
+    //the node id is the name, and the only one given at registration
     public class DeploymentLocation
     {
-        // Zone and room are worked out from where the sensor sits in the deployment
-        // tree, so they are blank until it has been placed there.
+        // Blank until the sensor has been placed in the tree.
         public string Zone { get; set; } = string.Empty;
 
         public string Room { get; set; } = string.Empty;

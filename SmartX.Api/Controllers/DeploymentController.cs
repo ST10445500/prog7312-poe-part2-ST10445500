@@ -60,9 +60,7 @@ namespace SmartX.Api.Controllers
 
             var result = _validator.Validate(root);
 
-            // The client validates before it offers to save, but that is only for
-            // feedback. Nothing stops a tree arriving here another way, so the
-            // gateway checks again before it keeps anything.
+            // The client checks first, but only for feedback. Nothing stops another caller.
             if (!result.IsValid)
             {
                 return BadRequest(result);
@@ -70,9 +68,7 @@ namespace SmartX.Api.Controllers
 
             _store.Replace(root);
 
-            // Where a sensor sits is now the tree's answer, so each registration is
-            // brought back in line with it rather than keeping whatever it was
-            // registered with.
+            // The tree is the answer now, so registrations are brought back in line.
             _store.ApplyLocationsTo(_sensors);
 
             return result;
@@ -96,12 +92,10 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
-        //reads a deployment tree from the request body, or null if there is not one to read
+        //reads a deployment tree from the request body, or null
         private async Task<DeploymentNode?> ReadTreeAsync()
         {
-            // The tree is read here rather than through a method parameter.
-            // Model binding gives up on a deeply nested body and fails with a
-            // 500 before the validator ever runs.
+            // Model binding gives up on a deeply nested body and 500s before the validator runs.
             string body;
 
             using (var reader = new StreamReader(Request.Body))

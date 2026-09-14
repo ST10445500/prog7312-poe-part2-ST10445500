@@ -10,7 +10,7 @@ using SmartX.Api.Models.Telemetry;
 namespace SmartX.Api.Collections
 {
     //holds the historical readings for one sensor in a grid of batches
-    //readings fill a row, and once every row is used the whole grid moves into a list
+    //readings fill a row, and a full grid moves into a list
     public class TelemetryBatches<T> where T : struct
     {
         //how many readings go into one batch
@@ -24,9 +24,7 @@ namespace SmartX.Api.Collections
         //at a reading every thirty seconds this works out to about forty one hours per sensor
         public const int MaxTransferred = 5000;
 
-        // A rectangular array of structs is one block of memory, so the whole
-        // grid is allocated once instead of one array per batch. That matters
-        // on a gateway device that is short on memory.
+        // One block of memory, allocated once. Gateways are short on it.
         private readonly TelemetryPacket<T>[,] _batches = new TelemetryPacket<T>[MaxBatches, BatchSize];
 
         //which row is being filled at the moment
@@ -51,7 +49,7 @@ namespace SmartX.Api.Collections
 
         //..............................................................................//
 
-        //adds a reading to the row being filled and starts a new row when it is full
+        //adds a reading, starting a new row when the current one fills
         public void Add(TelemetryPacket<T> packet)
         {
             _batches[_row, _column] = packet;
@@ -109,9 +107,7 @@ namespace SmartX.Api.Collections
 
             var newest = new List<TelemetryPacket<T>>(wanted);
 
-            // Walking backwards from the newest reading copies only the ones that
-            // were asked for. Flattening the whole history first would build a list
-            // of thousands of readings just to throw most of them away.
+            // Backwards from the newest, so only the wanted readings get copied.
             for (var column = _column - 1; column >= 0 && newest.Count < wanted; column--)
             {
                 newest.Add(_batches[_row, column]);
@@ -130,8 +126,7 @@ namespace SmartX.Api.Collections
                 newest.Add(_transferred[i]);
             }
 
-            // The walk collected them newest first, so the order is flipped back to
-            // match ToList and the rest of the api.
+            // Collected newest first, so flip it back.
             newest.Reverse();
             return newest;
         }
@@ -141,9 +136,7 @@ namespace SmartX.Api.Collections
         //transfers the finished rows out of the grid and into the list
         private void TransferBatchesToList()
         {
-            // The grid is only a staging area for recent batches. Once it is
-            // full the readings move into the list, which can keep growing, and
-            // the grid starts again from the first row.
+            // The grid is a staging area. Full means move to the list and start again.
             for (var row = 0; row < MaxBatches; row++)
             {
                 for (var column = 0; column < BatchSize; column++)
@@ -152,10 +145,7 @@ namespace SmartX.Api.Collections
                 }
             }
 
-            // The list is the long term store, but a gateway still cannot let it
-            // grow forever, so the oldest readings drop off the front. Dropping from
-            // the front shifts everything else along, but that only happens once every
-            // thousand readings, so the cost spread over each reading stays small.
+            // The list cannot grow forever either, so the oldest fall off the front.
             if (_transferred.Count > MaxTransferred)
             {
                 _transferred.RemoveRange(0, _transferred.Count - MaxTransferred);

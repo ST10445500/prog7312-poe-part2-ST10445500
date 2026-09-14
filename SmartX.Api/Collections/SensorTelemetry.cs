@@ -17,16 +17,12 @@ namespace SmartX.Api.Collections
         //at a reading every thirty seconds this is one hour of live view per sensor
         public const int LiveWindowSize = 120;
 
-        // The live window, the grid and the list together hold about six thousand
-        // readings per sensor, which comes to roughly 150 KB. Every stage is capped
-        // so a gateway that is left running does not fill up.
+        // About six thousand readings a sensor, roughly 150 KB. Every stage is capped.
         private readonly RingBuffer<TelemetryPacket<T>> _live = new RingBuffer<TelemetryPacket<T>>(LiveWindowSize);
 
         private readonly TelemetryBatches<T> _history = new TelemetryBatches<T>();
 
-        // The ring buffer and the batch grid are plain single threaded classes.
-        // Two readings arriving for the same sensor at once are kept apart here
-        // instead of complicating those two.
+        // The buffer and the grid are single threaded. This lock keeps them that way.
         private readonly object _lock = new object();
 
         //..............................................................................//
@@ -36,9 +32,7 @@ namespace SmartX.Api.Collections
         {
             lock (_lock)
             {
-                // The reading is kept in both places on purpose. The dashboard asks for
-                // the live window over and over, so holding a small copy there means
-                // those reads never have to go near the much larger history.
+                // Kept in both. The dashboard hits the live window constantly.
                 _live.Add(packet);
                 _history.Add(packet);
             }
@@ -71,8 +65,7 @@ namespace SmartX.Api.Collections
         //retrieves the newest readings held for this sensor, oldest first
         public List<TelemetryPacket<T>> GetHistory(int take)
         {
-            // Asking for a set number keeps the lock held for a short copy instead of
-            // a few thousand readings, so new readings are not held up behind a read.
+            // A set number keeps the lock held for a short copy.
             lock (_lock)
             {
                 return _history.GetNewest(take);
@@ -113,8 +106,6 @@ namespace SmartX.Api.Collections
                     TransferredToList = _history.TransferredCount
                 };
 
-                // A sensor that has sent nothing has no newest reading to report, so
-                // the two fields are left null rather than showing a made up value.
                 if (_live.Count > 0)
                 {
                     var latest = _live.Newest();

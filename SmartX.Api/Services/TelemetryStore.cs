@@ -15,10 +15,7 @@ namespace SmartX.Api.Services
     //keeps the telemetry for every sensor, split up by the kind of reading it sends
     public class TelemetryStore
     {
-        // There is a separate dictionary per category on purpose. One shared
-        // dictionary would have to hold the readings as object, which boxes
-        // every single one, and avoiding that is the whole reason
-        // TelemetryPacket<T> is constrained to a struct.
+        // One dictionary per category. A shared one would box every reading as object.
         private readonly ConcurrentDictionary<string, SensorTelemetry<MoistureReading>> _environmental = new();
 
         private readonly ConcurrentDictionary<string, SensorTelemetry<PowerReading>> _power = new();
@@ -127,9 +124,7 @@ namespace SmartX.Api.Services
                 case SensorCategory.Actuator:
                     return Find(_actuators, macAddress)?.GetUsage();
 
-                // A category outside the three the gateway accepts means the caller
-                // sent something unknown, so nothing comes back rather than actuator
-                // readings that were never asked for.
+                // An unknown category means nothing comes back.
                 default:
                     return null;
             }
@@ -152,9 +147,7 @@ namespace SmartX.Api.Services
             {
                 var total = new PowerReading(0);
 
-                // This is what the + operator on PowerReading is for. Adding the
-                // readings themselves keeps the wattage and its meaning together
-                // instead of pulling the ints out and summing those by hand.
+                // This is what the + operator on PowerReading is for.
                 foreach (var meter in _power.Values)
                 {
                     if (meter.TryGetNewest(out var latest))

@@ -51,8 +51,7 @@ namespace SmartX.Api.Collections
         {
             _items[_nextSlot] = item;
 
-            // Wrapping back to the start is what makes this fixed size. A gateway
-            // device cannot afford a list that grows for every reading it takes.
+            // Wrapping is what makes this fixed size.
             _nextSlot = (_nextSlot + 1) % _items.Length;
 
             if (_count < _items.Length)
@@ -73,8 +72,7 @@ namespace SmartX.Api.Collections
                     throw new ArgumentOutOfRangeException(nameof(index));
                 }
 
-                // Once the buffer has wrapped, the oldest item sits in the slot
-                // that is about to be overwritten next.
+                // After a wrap the oldest item is the one about to be overwritten.
                 var oldest = IsFull ? _nextSlot : 0;
                 return _items[(oldest + index) % _items.Length];
             }

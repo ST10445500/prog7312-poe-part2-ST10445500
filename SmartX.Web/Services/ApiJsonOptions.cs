@@ -13,9 +13,7 @@ namespace SmartX.Web.Services
     //shared json settings for every call to the gateway api
     public static class ApiJsonOptions
     {
-        // The gateway always sends and expects enum values as strings, so the
-        // client needs the same converter or a response like "category":"Environmental"
-        // fails to deserialize.
+        // The gateway sends enums as strings and the client has to match it.
         public static readonly JsonSerializerOptions Default = CreateOptions();
 
         //..............................................................................//
@@ -25,10 +23,7 @@ namespace SmartX.Web.Services
             var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             options.Converters.Add(new JsonStringEnumConverter());
 
-            // A deployment tree costs two levels of depth per level of tree, so the
-            // default of 64 runs out around 32 levels deep. The API already reads
-            // trees at 256 and the client has to match it or the same tree cannot
-            // be shown or posted.
+            // A tree costs two levels of depth per level, and the API reads at 256.
             options.MaxDepth = 256;
 
             return options;

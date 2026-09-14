@@ -9,8 +9,8 @@ using System.Security.Cryptography;
 
 namespace SmartX.Api.Services
 {
-    //encrypts and decrypts attachment files as they stream past, without ever holding one in memory
-    //aes needs a fresh iv per file, so it is written in front of the ciphertext and read back off it later
+    //encrypts and decrypts attachments as they stream, never holding one in memory
+    //a fresh iv per file, written in front of the ciphertext
     public class AttachmentEncryption
     {
         //aes-256, so the key is 32 bytes and the iv is one 16 byte block
@@ -28,9 +28,7 @@ namespace SmartX.Api.Services
         {
             var configured = configuration["Encryption:Key"];
 
-            // Failing here rather than on the first upload means a missing or
-            // malformed key is found when the gateway starts, not hours later when
-            // someone tries to attach a file.
+            // Checking at startup finds a bad key now, not hours later on the first upload.
             if (string.IsNullOrWhiteSpace(configured))
             {
                 throw new InvalidOperationException("Encryption:Key is not configured, so attachments cannot be stored.");
@@ -53,8 +51,7 @@ namespace SmartX.Api.Services
             aes.Key = _key;
             aes.GenerateIV();
 
-            // The iv is not a secret, it only has to be different every time, so it
-            // goes in front of the ciphertext where decryption can find it.
+            // The iv is not secret, only unique, and sits in front of the ciphertext.
             await destination.WriteAsync(aes.IV, token);
 
             using var crypto = new CryptoStream(destination, aes.CreateEncryptor(), CryptoStreamMode.Write, leaveOpen: true);
@@ -63,8 +60,7 @@ namespace SmartX.Api.Services
             long copied = 0;
             int read;
 
-            // Copying a buffer at a time is what keeps a large upload from being held
-            // in memory. The same few kilobytes are reused for the whole file.
+            // A buffer at a time, so a large upload never sits in memory.
             while ((read = await source.ReadAsync(buffer, token)) > 0)
             {
                 await crypto.WriteAsync(buffer.AsMemory(0, read), token);

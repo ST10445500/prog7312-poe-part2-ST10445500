@@ -8,7 +8,7 @@
 namespace SmartX.Shared.Models
 {
     //holds what the client is told about one attached file
-    //the name of the encrypted copy on disk is deliberately left out, the client has no use for it
+    //the name of the encrypted copy is left out, the client cannot use it
     public class AttachmentSummary
     {
         //identity used to ask for the file back
@@ -23,7 +23,7 @@ namespace SmartX.Shared.Models
         //how big the file is once decrypted
         public long SizeInBytes { get; set; }
 
-        //how big the encrypted copy on disk is, so the client can show that the stored file is not the original
+        //size of the encrypted copy, which is not the size of the original
         public long StoredSizeInBytes { get; set; }
 
         //when the gateway accepted it

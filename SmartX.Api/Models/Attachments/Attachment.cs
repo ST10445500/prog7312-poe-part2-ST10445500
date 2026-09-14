@@ -7,7 +7,7 @@
 
 namespace SmartX.Api.Models.Attachments
 {
-    //holds one file attached to a sensor, such as a config file, a photo or a hardware log
+    //holds one file attached to a sensor
     //the file itself sits on disk encrypted, so this only describes it
     public class Attachment
     {
@@ -26,7 +26,7 @@ namespace SmartX.Api.Models.Attachments
         //how big the file is before it was encrypted
         public long SizeInBytes { get; set; }
 
-        //how big the encrypted copy on disk is, which is larger because of the iv and the padding
+        //size on disk, larger than the original because of the iv and padding
         public long StoredSizeInBytes { get; set; }
 
         //when the gateway accepted it

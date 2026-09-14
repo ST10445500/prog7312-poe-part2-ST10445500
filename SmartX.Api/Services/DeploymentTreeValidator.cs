@@ -10,7 +10,7 @@ using SmartX.Shared.Models;
 namespace SmartX.Api.Services
 {
     //walks a deployment hierarchy and reports anything wrong with it
-    //the tree can be any depth, so each level calls the same method again on its children
+    //any depth, so each level calls the same method on its children
     public class DeploymentTreeValidator
     {
         //how deep the walk is allowed to go before the tree is treated as malformed
@@ -54,9 +54,7 @@ namespace SmartX.Api.Services
                 result.DeepestLevel = depth;
             }
 
-            // A real deployment is nowhere near this deep, so hitting the limit
-            // means the tree is malformed. Without this the recursion would keep
-            // going and overflow the stack.
+            // Nothing real is this deep. Without the limit the recursion overflows the stack.
             if (depth > MaxDepth)
             {
                 result.Errors.Add($"'{path}' is nested deeper than {MaxDepth} levels, which is not a valid deployment.");

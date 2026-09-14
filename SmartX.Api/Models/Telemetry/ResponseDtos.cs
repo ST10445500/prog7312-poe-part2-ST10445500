@@ -25,7 +25,7 @@ namespace SmartX.Api.Models.Telemetry
     //..............................................................................//
 
     //holds what happened to a batch of readings
-    //a real gateway keeps the good readings out of a batch instead of throwing the whole thing away, so both counts come back
+    //a real gateway keeps the good readings out of a bad batch
     public class BatchSummary
     {
         //how many readings were stored

@@ -51,9 +51,7 @@ namespace SmartX.Api.Models.Telemetry
         //checks whether two readings are close enough to count as the same
         public static bool operator ==(MoistureReading left, MoistureReading right)
         {
-            // A moisture sensor drifts a little between readings, so an exact float
-            // match would almost never be true. Anything inside the tolerance is
-            // treated as the same reading.
+            // A sensor drifts between readings, so an exact float match would never hit.
             return Math.Abs(left.Percent - right.Percent) < Tolerance;
         }
 
@@ -74,10 +72,7 @@ namespace SmartX.Api.Models.Telemetry
         //retrieves a hash code that agrees with the tolerance the equals operator uses
         public override int GetHashCode()
         {
-            // Two readings inside the tolerance have to give the same hash, and no
-            // bucket size gets that right for every pair sitting near a bucket edge.
-            // This struct is never used as a dictionary or set key in the gateway, so
-            // every reading hashing the same way costs nothing and is always correct.
+            // Readings inside the tolerance have to hash alike. This is never used as a key.
             return 0;
         }
 

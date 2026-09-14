@@ -27,7 +27,7 @@ namespace SmartX.Api.Models.Telemetry
     //..............................................................................//
 
     //holds one reading the gateway kept, in the flat shape the dashboard reads
-    //moisture, wattage and valve states all come back looking the same so the client only draws one thing
+    //every category comes back the same shape, so the client draws one thing
     public class RecordedReading
     {
         //the moisture percentage or the wattage, or null for an actuator

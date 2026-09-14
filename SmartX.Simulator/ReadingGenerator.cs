@@ -10,37 +10,34 @@ using SmartX.Shared.Models;
 namespace SmartX.Simulator
 {
     //produces readings for one sensor that drift and occasionally spike
-    //each sensor gets its own generator so its value carries on from where it was
+    //one generator each, so a value carries on from where it was
     public class ReadingGenerator
     {
         //how often a reading is a deliberate spike, as one in this many
         private const int SpikeOdds = 25;
 
-        //how quickly a reading outside its normal band is eased back toward the middle
+        //how quickly a stray reading is eased back toward the middle
         private const double RecoveryRate = 0.25;
 
-        //the band a healthy moisture sensor sits in, and how far it moves per reading
+        //the band a healthy moisture sensor sits in, and its step size
         private const double MinMoisture = 35;
         private const double MaxMoisture = 60;
         private const double MoistureDrift = 1.5;
 
-        // The gateway calls a moisture change a spike at fifteen percent, so a drop
-        // has to clear that to be worth drawing on the ribbon.
+        // Has to clear the gateway's fifteen percent to draw on the ribbon.
         private const double MoistureSpikeDrop = 20;
 
-        //the band a healthy power meter sits in, and how far it moves per reading
+        //the band a healthy power meter sits in, and its step size
         private const double MinWatts = 200;
         private const double MaxWatts = 400;
         private const double WattDrift = 8;
 
-        // Same idea as the moisture drop, against the gateway's fifty watt threshold.
+        // Same idea, against the gateway's fifty watts.
         private const double WattSpikeJump = 90;
 
         private readonly SensorCategory _category;
 
-        // Each generator holds its own Random rather than sharing one, because the
-        // simulator runs a task per sensor and they would otherwise be drawing from
-        // the same instance at the same time.
+        // A task per sensor means a shared Random would be drawn from at once.
         private readonly Random _random;
 
         private double _value;
@@ -100,8 +97,7 @@ namespace SmartX.Simulator
                 _value = EaseBack(_value, MinMoisture, MaxMoisture);
             }
 
-            // The gateway refuses a percentage outside nought to a hundred, so a run
-            // of drops is not allowed to push it past the bottom.
+            // A run of drops is not allowed to push this below nought.
             _value = Math.Clamp(_value, 0, 100);
             return Math.Round(_value, 1);
         }
@@ -130,8 +126,7 @@ namespace SmartX.Simulator
         //produces the next valve state, which mostly stays where it was
         private bool NextState()
         {
-            // The gateway counts an actuator changing state as a spike, so flipping
-            // it at the same odds as the other two keeps the ribbon consistent.
+            // A state change counts as a spike, at the same odds as the other two.
             if (IsSpike())
             {
                 _state = !_state;
@@ -166,8 +161,7 @@ namespace SmartX.Simulator
                 return value;
             }
 
-            // Without this a sensor that spiked would sit at its new value forever
-            // and every later window would look normal again at the wrong level.
+            // Without this a spiked sensor sits at its new value forever.
             var middle = (minimum + maximum) / 2;
             return value + ((middle - value) * RecoveryRate);
         }

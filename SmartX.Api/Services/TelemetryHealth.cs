@@ -10,8 +10,8 @@ using SmartX.Shared.Models;
 
 namespace SmartX.Api.Services
 {
-    //splits the recent readings for a sensor into equal windows of time and says what happened in each
-    //a window with nothing in it is a disconnect, and a window holding a sharp change is a spike
+    //splits recent readings into equal windows and says what happened in each
+    //an empty window is a disconnect, a sharp change is a spike
     public class TelemetryHealth
     {
         //how many windows are worked out when the caller does not ask for a number
@@ -26,20 +26,18 @@ namespace SmartX.Api.Services
         //the longest one window may cover, which is an hour
         public const int MaxWindowSeconds = 3600;
 
-        //how many windows a sensor has to stay quiet for before it is treated as off the air
+        //how many quiet windows before a sensor counts as off the air
         public const int SilentAfterWindows = 2;
 
-        // The three thresholds below are starting values, picked so that a demo
-        // reading produces something visible on the dashboard. A gateway in real
-        // use would work them out per device from that device's own history.
+        // Starting values picked for the demo. Real use would learn them per device.
 
-        //how many watts a meter has to jump between two readings before it counts as a spike
+        //how many watts a meter has to jump to count as a spike
         public const int PowerSpikeWatts = 50;
 
         //how far moisture has to move between two readings before it counts as a spike
         public const float MoistureSpikePercent = 15f;
 
-        //how many times an actuator has to change state inside one window before it counts as flapping
+        //how many state changes in a window count as flapping
         public const int ActuatorFlapChanges = 3;
 
         private readonly TelemetryStore _telemetry;
@@ -90,7 +88,7 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
-        //adds a window for each stretch of time a moisture sensor was meant to be reporting in
+        //adds a window for each stretch a moisture sensor should have reported in
         private void AddMoistureWindows(SensorHealth health, string macAddress, DateTime start, int windowCount, int windowSeconds, DateTime now)
         {
             var readings = _telemetry.GetMoistureLive(macAddress);
@@ -104,7 +102,7 @@ namespace SmartX.Api.Services
             health.SecondsSinceLastReading = SecondsSince(readings, now);
         }
 
-        //adds a window for each stretch of time a power meter was meant to be reporting in
+        //adds a window for each stretch a power meter should have reported in
         private void AddPowerWindows(SensorHealth health, string macAddress, DateTime start, int windowCount, int windowSeconds, DateTime now)
         {
             var readings = _telemetry.GetPowerLive(macAddress);
@@ -118,7 +116,7 @@ namespace SmartX.Api.Services
             health.SecondsSinceLastReading = SecondsSince(readings, now);
         }
 
-        //adds a window for each stretch of time an actuator was meant to be reporting in
+        //adds a window for each stretch an actuator should have reported in
         private void AddActuatorWindows(SensorHealth health, string macAddress, DateTime start, int windowCount, int windowSeconds, DateTime now)
         {
             var readings = _telemetry.GetValveLive(macAddress);
@@ -151,8 +149,7 @@ namespace SmartX.Api.Services
             {
                 var change = readings[index].Value - readings[index - 1].Value;
 
-                // Soil drying out and soil flooding are both faults, so a fall is
-                // turned back into a positive distance before it is compared.
+                // Drying out and flooding are both faults, so a fall is made positive.
                 if (change < none)
                 {
                     change = none - change;
@@ -197,8 +194,7 @@ namespace SmartX.Api.Services
             {
                 var change = readings[index].Value - readings[index - 1].Value;
 
-                // A load being dropped matters as much as a load being pulled, so a
-                // fall is turned back into a positive distance before it is compared.
+                // A dropped load matters as much as a pulled one.
                 if (change < none)
                 {
                     change = none - change;
@@ -249,9 +245,7 @@ namespace SmartX.Api.Services
             window.Latest = readings[readings.Count - 1].Value ? "Open" : "Closed";
             window.LatestValue = readings[readings.Count - 1].Value ? 1 : 0;
 
-            // A valve cannot spike the way a meter can, because it is only ever open
-            // or closed. The fault worth catching is one that keeps flipping between
-            // the two inside a single window.
+            // A valve is only open or closed. The fault is one that keeps flipping.
             if (changes >= ActuatorFlapChanges)
             {
                 window.Status = TelemetryStatus.Spike;
@@ -281,8 +275,7 @@ namespace SmartX.Api.Services
             {
                 var secondsIn = (packet.RecordedAt - start).TotalSeconds;
 
-                // Readings older than the first window, and any that arrive stamped
-                // ahead of the gateway clock, have no window to sit in.
+                // Readings before the first window, or ahead of the clock, have nowhere to sit.
                 if (secondsIn < 0)
                 {
                     continue;
@@ -304,9 +297,7 @@ namespace SmartX.Api.Services
         //works out where the oldest window on the ribbon begins
         private static DateTime FirstWindowStart(DateTime now, int windowCount, int windowSeconds)
         {
-            // The windows sit on a fixed grid instead of ending at whatever second it
-            // happens to be, so the blocks do not shuffle sideways every time the
-            // dashboard asks for them again.
+            // A fixed grid, or the blocks shuffle sideways on every refresh.
             var windowTicks = TimeSpan.TicksPerSecond * (long)windowSeconds;
             var currentWindow = new DateTime(now.Ticks - (now.Ticks % windowTicks), now.Kind);
 
@@ -344,8 +335,7 @@ namespace SmartX.Api.Services
 
             var seconds = (now - readings[readings.Count - 1].RecordedAt).TotalSeconds;
 
-            // A device with a fast clock can stamp a reading slightly in the future,
-            // and a negative age on the dashboard looks like a bug.
+            // A fast device clock can stamp ahead, and a negative age looks like a bug.
             return Math.Max(0, seconds);
         }
 
@@ -354,8 +344,7 @@ namespace SmartX.Api.Services
         //works out how the sensor is doing right now from the windows already built
         private static TelemetryStatus OverallStatus(SensorHealth health, int windowSeconds)
         {
-            // A sensor that is off the air right now matters more than one that spiked
-            // a few minutes ago, so silence is checked first.
+            // Silence first. Off the air now beats spiked a few minutes ago.
             if (health.SecondsSinceLastReading == null || health.SecondsSinceLastReading > windowSeconds * SilentAfterWindows)
             {
                 return TelemetryStatus.Silent;

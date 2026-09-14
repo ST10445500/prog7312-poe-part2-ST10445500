@@ -13,9 +13,7 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Falls back to the client's own origin if the setting is missing, so a
-// broken config shows up as a failed api call instead of quietly pointing
-// nowhere useful.
+// Falling back to our own origin makes a missing setting show up as a failed call.
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 

@@ -54,8 +54,6 @@ namespace SmartX.Api.Models.Telemetry
         //checks whether two meters reported the same wattage
         public static bool operator ==(PowerReading left, PowerReading right)
         {
-            // Wattage is a whole number, so unlike a moisture percentage this can be
-            // compared exactly and needs no tolerance.
             return left.Watts == right.Watts;
         }
 
