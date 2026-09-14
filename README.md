@@ -428,7 +428,7 @@ The OpenAPI document is at `/openapi/v1.json` when the API runs in Development.
 
 ## Demo
 
-Video walkthrough: *link to follow.*
+Video walkthrough: https://youtu.be/pjHgg7T9UWc 
 
 ---
 
