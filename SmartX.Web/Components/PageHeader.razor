@@ -1,0 +1,16 @@
+<div class="page-header">
+    <h1 class="h2">@Title</h1>
+    <p>@Blurb</p>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Blurb { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

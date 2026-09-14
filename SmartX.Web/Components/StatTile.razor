@@ -1,0 +1,22 @@
+<div class="stat-tile">
+    <div class="stat-label">@Label</div>
+    <div class="stat-value @ValueClass">@Value</div>
+    @if (!string.IsNullOrWhiteSpace(Note))
+    {
+        <div class="stat-note">@Note</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Value { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Note { get; set; }
+
+    [Parameter]
+    public string ValueClass { get; set; } = string.Empty;
+}
