@@ -34,7 +34,7 @@ else if (_sensors.Count == 0)
 else
 {
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <FleetSummary Sensors="_sensors" />
+        <FleetSummary Sensors="_sensors" Load="_fleetLoad" />
 
         @if (_lastUpdated != null)
         {
@@ -152,6 +152,7 @@ else
     private const int AlertTimeoutMilliseconds = 3000;
 
     private List<SensorOverview>? _sensors;
+    private FleetLoad? _fleetLoad;
     private bool _loadFailed;
     private DateTime? _lastUpdated;
     private System.Timers.Timer? _pollTimer;
@@ -247,6 +248,7 @@ else
         try
         {
             _sensors = await Http.GetFromJsonAsync<List<SensorOverview>>("api/telemetry/overview", ApiJsonOptions.Default);
+            _fleetLoad = await Http.GetFromJsonAsync<FleetLoad>("api/telemetry/load", ApiJsonOptions.Default);
             _loadFailed = false;
             _lastUpdated = DateTime.UtcNow;
 

@@ -81,6 +81,24 @@ namespace SmartX.Api.Collections
 
         //..............................................................................//
 
+        //retrieves the newest reading, or false if the sensor has sent nothing yet
+        public bool TryGetNewest(out T value)
+        {
+            lock (_lock)
+            {
+                if (_live.Count == 0)
+                {
+                    value = default;
+                    return false;
+                }
+
+                value = _live.Newest().Value;
+                return true;
+            }
+        }
+
+        //..............................................................................//
+
         //retrieves how full each of the structures is
         public TelemetryUsage GetUsage()
         {

@@ -8,7 +8,7 @@
 namespace SmartX.Api.Models.Telemetry
 {
     //holds a power reading in watts
-    //meters can be added together, which is what the + operator is for
+    //meters add together for the fleets total draw, which is what + is for
     public readonly struct PowerReading
     {
         //how many watts the meter reported

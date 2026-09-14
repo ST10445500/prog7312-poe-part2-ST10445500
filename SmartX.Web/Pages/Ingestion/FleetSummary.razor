@@ -11,11 +11,23 @@
         <div class="ribbon-block ribbon-silent" style="width: 18px; height: 12px;"></div>
         <span class="text-muted small">@Count(TelemetryStatus.Silent) nothing received</span>
     </div>
+    @if (Load is { MetersReporting: > 0 })
+    {
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">
+                <span class="font-monospace">@Load.TotalLoad</span>
+                across @Load.MetersReporting @(Load.MetersReporting == 1 ? "meter" : "meters")
+            </span>
+        </div>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired]
     public List<SensorOverview> Sensors { get; set; } = null!;
+
+    [Parameter]
+    public FleetLoad? Load { get; set; }
 
     private int Count(TelemetryStatus status)
     {

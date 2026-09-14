@@ -142,6 +142,33 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
+        //retrieves how many power meters have reported at least one reading
+        public int PowerMetersReporting => _power.Count;
+
+        //adds up what every power meter last reported, for the fleets total draw
+        public PowerReading TotalPowerLoad
+        {
+            get
+            {
+                var total = new PowerReading(0);
+
+                // This is what the + operator on PowerReading is for. Adding the
+                // readings themselves keeps the wattage and its meaning together
+                // instead of pulling the ints out and summing those by hand.
+                foreach (var meter in _power.Values)
+                {
+                    if (meter.TryGetNewest(out var latest))
+                    {
+                        total = total + latest;
+                    }
+                }
+
+                return total;
+            }
+        }
+
+        //..............................................................................//
+
         //looks a sensor up in one of the dictionaries, or returns null
         private static SensorTelemetry<T>? Find<T>(ConcurrentDictionary<string, SensorTelemetry<T>> readings, string macAddress) where T : struct
         {

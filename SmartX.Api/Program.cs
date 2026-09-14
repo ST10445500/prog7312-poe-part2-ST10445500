@@ -24,7 +24,6 @@ builder.Services.AddSingleton<AttachmentEncryption>();
 builder.Services.AddControllers()
 	.AddJsonOptions(options =>
 		options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 // The Blazor client runs as its own standalone app, so its origin needs to

@@ -174,6 +174,19 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
+        //retrieves the combined draw of every power meter on the fleet
+        [HttpGet("load")]
+        public ActionResult<FleetLoad> GetLoad()
+        {
+            return new FleetLoad
+            {
+                TotalLoad = _telemetry.TotalPowerLoad.ToString(),
+                MetersReporting = _telemetry.PowerMetersReporting
+            };
+        }
+
+        //..............................................................................//
+
         //builds one sensor's overview row from its latest usage snapshot
         private SensorOverview BuildOverview(SensorRegistration sensor)
         {
