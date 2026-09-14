@@ -9,7 +9,12 @@
     <IngestionNav />
 </PageHeader>
 
-<ApiErrorAlert Show="_loadFailed" />
+@if (_loadFailed)
+{
+    <div class="alert alert-danger">
+        Cannot reach the gateway. Readings on this page may be out of date.
+    </div>
+}
 
 <datalist id="@MacListId">
     @if (_sensors != null)
@@ -148,13 +153,19 @@
         }
         else if (!_loadFailed)
         {
-            <LoadingBlock />
+            <div class="text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                Loading...
+            </div>
         }
     </div>
 </div>
 
 @code {
     private const string MacListId = "known-mac-addresses";
+
+    //deep enough that the validators depth guard turns the demo tree away
+    private const int DemoTreeDepth = 40;
 
     private static readonly JsonSerializerOptions TreeDisplayOptions = new(ApiJsonOptions.Default) { WriteIndented = true };
 
@@ -392,14 +403,60 @@
 
     private void LoadBrokenExample()
     {
-        _editJson = JsonSerializer.Serialize(DeploymentTreeBuilder.BuildBrokenExample(), TreeDisplayOptions);
+        _editJson = JsonSerializer.Serialize(BuildBrokenExample(), TreeDisplayOptions);
         _jsonParseError = null;
     }
 
     private void LoadDeepExample()
     {
-        _editJson = JsonSerializer.Serialize(DeploymentTreeBuilder.BuildDeepExample(), TreeDisplayOptions);
+        _editJson = JsonSerializer.Serialize(BuildDeepExample(), TreeDisplayOptions);
         _jsonParseError = null;
+    }
+
+    //a tree with a duplicate sibling name and a sensor that also has a child
+    private static DeploymentNode BuildBrokenExample()
+    {
+        return new DeploymentNode
+        {
+            Name = "Facility A",
+            Children =
+            [
+                new DeploymentNode
+                {
+                    Name = "Zone 1",
+                    Children = [new DeploymentNode { Name = "Probe", SensorMacAddress = "11:22:33:44:55:66" }]
+                },
+                new DeploymentNode
+                {
+                    Name = "Zone 1",
+                    Children =
+                    [
+                        new DeploymentNode
+                        {
+                            Name = "Valve A",
+                            SensorMacAddress = "AA:BB:CC:DD:EE:FF",
+                            Children = [new DeploymentNode { Name = "Should not be here" }]
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+
+    //a straight chain nested past the validators depth limit
+    private static DeploymentNode BuildDeepExample()
+    {
+        var root = new DeploymentNode { Name = "Level 1" };
+        var current = root;
+
+        for (var level = 2; level <= DemoTreeDepth; level++)
+        {
+            var child = new DeploymentNode { Name = $"Level {level}" };
+            current.Children.Add(child);
+            current = child;
+        }
+
+        return root;
     }
 
     private void ShowJson()

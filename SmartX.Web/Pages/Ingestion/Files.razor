@@ -8,13 +8,20 @@
     <IngestionNav />
 </PageHeader>
 
-<ApiErrorAlert Show="_loadFailed" />
+@if (_loadFailed)
+{
+    <div class="alert alert-danger">
+        Cannot reach the gateway. Readings on this page may be out of date.
+    </div>
+}
 
 @if (_sensors is { Count: 0 })
 {
-    <EmptyState>
-        No devices on this gateway yet. <a href="ingestion/fleet">Add one</a> before attaching documents.
-    </EmptyState>
+    <div class="card mb-4">
+        <div class="card-body text-center text-muted py-5">
+            No devices on this gateway yet. <a href="ingestion/fleet">Add one</a> before attaching documents.
+        </div>
+    </div>
 }
 else
 {
@@ -37,7 +44,10 @@ else
 
             @if (_attachments == null)
             {
-                <LoadingBlock />
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Loading...
+                </div>
             }
             else if (_attachments.Count == 0)
             {

@@ -9,7 +9,12 @@
     <IngestionNav />
 </PageHeader>
 
-<ApiErrorAlert Show="_loadFailed" />
+@if (_loadFailed)
+{
+    <div class="alert alert-danger">
+        Cannot reach the gateway. Readings on this page may be out of date.
+    </div>
+}
 
 @if (_registerSucceeded)
 {
@@ -20,18 +25,45 @@
 
 @if (_sensors == null && !_loadFailed)
 {
-    <LoadingBlock />
+    <div class="text-center text-muted py-4">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        Loading...
+    </div>
 }
 else if (_sensors is { Count: 0 })
 {
-    <EmptyState>
-        No devices on this gateway yet. Add the first one below.
-    </EmptyState>
+    <div class="card mb-4">
+        <div class="card-body text-center text-muted py-5">
+            No devices on this gateway yet. Add the first one below.
+        </div>
+    </div>
 }
 else if (_sensors != null)
 {
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <FleetSummary Sensors="_sensors" Load="_fleetLoad" />
+        <div class="d-flex flex-wrap gap-4">
+            <div class="d-flex align-items-center gap-2">
+                <div class="ribbon-swatch ribbon-normal"></div>
+                <span class="text-muted small">@Count(TelemetryStatus.Normal) reporting normally</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="ribbon-swatch ribbon-spike"></div>
+                <span class="text-muted small">@Count(TelemetryStatus.Spike) sharp change</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="ribbon-swatch ribbon-silent"></div>
+                <span class="text-muted small">@Count(TelemetryStatus.Silent) nothing received</span>
+            </div>
+            @if (_fleetLoad is { MetersReporting: > 0 })
+            {
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">
+                        <span class="font-monospace">@_fleetLoad.TotalLoad</span>
+                        across @_fleetLoad.MetersReporting @(_fleetLoad.MetersReporting == 1 ? "meter" : "meters")
+                    </span>
+                </div>
+            }
+        </div>
 
         @if (_lastUpdated != null)
         {
@@ -124,11 +156,13 @@ else if (_sensors != null)
                         </div>
                     </div>
 
-                    <BusyButton Type="submit"
-                                CssClass="btn btn-primary mt-3"
-                                Label="Add device"
-                                BusyLabel="Adding..."
-                                Busy="_isSubmitting" />
+                    <button type="submit" class="btn btn-primary mt-3" disabled="@_isSubmitting">
+                        @if (_isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        @(_isSubmitting ? "Adding..." : "Add device")
+                    </button>
                 </EditForm>
             </div>
         </div>
@@ -183,8 +217,8 @@ else if (_sensors != null)
                             <div class="col-12 col-sm-5">
                                 <label class="form-label">State</label>
                                 <select class="form-select" @bind="_testState">
-                                    <option value="@(true)">Open</option>
-                                    <option value="@(false)">Closed</option>
+                                    <option value="@ValveState.Open">Open</option>
+                                    <option value="@ValveState.Closed">Closed</option>
                                 </select>
                             </div>
                         }
@@ -227,10 +261,16 @@ else if (_sensors != null)
 
     private string _selectedMac = string.Empty;
     private double? _testValue;
-    private bool _testState;
+    private ValveState _testState = ValveState.Closed;
     private bool _isSubmittingReading;
     private bool _readingSucceeded;
     private string? _readingError;
+
+    //how many devices are in each state right now
+    private int Count(TelemetryStatus status)
+    {
+        return _sensors?.Count(sensor => sensor.Health.Status == status) ?? 0;
+    }
 
     private SensorCategory? SelectedCategory =>
         _sensors?.FirstOrDefault(sensor => sensor.MacAddress == _selectedMac)?.Category;
@@ -373,7 +413,7 @@ else if (_sensors != null)
         try
         {
             var reading = SelectedCategory == SensorCategory.Actuator
-                ? new TestReading(_selectedMac, null, _testState)
+                ? new TestReading(_selectedMac, null, _testState == ValveState.Open)
                 : new TestReading(_selectedMac, _testValue, null);
 
             var response = await Http.PostAsJsonAsync("api/telemetry", reading, ApiJsonOptions.Default);
@@ -419,4 +459,6 @@ else if (_sensors != null)
     }
 
     private record TestReading(string MacAddress, double? Value, bool? State);
+
+    private enum ValveState { Open, Closed }
 }

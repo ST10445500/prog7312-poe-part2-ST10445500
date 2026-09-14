@@ -9,17 +9,27 @@
     <IngestionNav />
 </PageHeader>
 
-<ApiErrorAlert Show="_loadFailed" />
+@if (_loadFailed)
+{
+    <div class="alert alert-danger">
+        Cannot reach the gateway. Readings on this page may be out of date.
+    </div>
+}
 
 @if (_sensors == null && !_loadFailed)
 {
-    <LoadingBlock />
+    <div class="text-center text-muted py-4">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        Loading...
+    </div>
 }
 else if (_sensors is { Count: 0 })
 {
-    <EmptyState>
-        No devices on this gateway yet. <a href="ingestion/fleet">Add one</a> and its readings will show up here.
-    </EmptyState>
+    <div class="card mb-4">
+        <div class="card-body text-center text-muted py-5">
+            No devices on this gateway yet. <a href="ingestion/fleet">Add one</a> and its readings will show up here.
+        </div>
+    </div>
 }
 else if (_sensors != null)
 {
@@ -43,7 +53,7 @@ else if (_sensors != null)
             <StatTile Label="Sharp change" Value="@Count(TelemetryStatus.Spike).ToString()" Note="jumped between readings" ValueClass="@(Count(TelemetryStatus.Spike) > 0 ? "stat-value-warn" : "")" />
         </div>
         <div class="col-6 col-lg">
-            <StatTile Label="Silent" Value="@Count(TelemetryStatus.Silent).ToString()" Note="nothing for 20 seconds" ValueClass="@(Count(TelemetryStatus.Silent) > 0 ? "stat-value-fault" : "")" />
+            <StatTile Label="Silent" Value="@Count(TelemetryStatus.Silent).ToString()" Note="@SilentNote" ValueClass="@(Count(TelemetryStatus.Silent) > 0 ? "stat-value-fault" : "")" />
         </div>
         <div class="col-12 col-lg">
             <StatTile Label="Total draw" Value="@(_fleetLoad?.TotalLoad ?? "-")" Note="@FleetLoadNote" />
@@ -120,6 +130,35 @@ else if (_sensors != null)
 
     private static string StatusChipClass(SensorOverview sensor) =>
         sensor.Health.Status == TelemetryStatus.Silent ? "status-chip-silent" : "status-chip-spike";
+
+    //how long the silent devices have been quiet
+    private string SilentNote
+    {
+        get
+        {
+            var quiet = _sensors?
+                .Where(sensor => sensor.Health.Status == TelemetryStatus.Silent)
+                .ToList() ?? new List<SensorOverview>();
+
+            if (quiet.Count == 0)
+            {
+                return "every device reporting";
+            }
+
+            var gaps = quiet
+                .Where(sensor => sensor.Health.SecondsSinceLastReading != null)
+                .Select(sensor => (int)sensor.Health.SecondsSinceLastReading!.Value)
+                .ToList();
+
+            // A device that has never reported has no gap to measure.
+            if (gaps.Count == 0)
+            {
+                return "nothing received yet";
+            }
+
+            return $"quiet for up to {SensorFormatting.DescribeDuration(gaps.Max())}";
+        }
+    }
 
     private string FleetLoadNote =>
         _fleetLoad is { MetersReporting: > 0 }

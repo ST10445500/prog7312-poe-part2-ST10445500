@@ -5,7 +5,7 @@ using SmartX.Shared.Models;
 
 //.....................................o0oSTART OF FILEo0o........................................//
 
-// The service keeps business rules and validation away from the controller.
+// The helper keeps shared client wording and settings out of the pages that use them.
 
 namespace SmartX.Web.Services
 {
@@ -81,19 +81,25 @@ namespace SmartX.Web.Services
                 return "no readings yet";
             }
 
-            var seconds = (int)health.SecondsSinceLastReading.Value;
+            return $"{DescribeDuration((int)health.SecondsSinceLastReading.Value)} ago";
+        }
 
+        //..............................................................................//
+
+        //a span of time in the largest unit that still reads sensibly
+        public static string DescribeDuration(int seconds)
+        {
             if (seconds < 60)
             {
-                return $"{seconds}s ago";
+                return $"{seconds}s";
             }
 
             if (seconds < 3600)
             {
-                return $"{seconds / 60}m ago";
+                return $"{seconds / 60}m";
             }
 
-            return $"{seconds / 3600}h ago";
+            return $"{seconds / 3600}h";
         }
 
         //..............................................................................//

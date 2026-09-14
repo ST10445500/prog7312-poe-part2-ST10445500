@@ -14,8 +14,8 @@ namespace SmartX.Api.Collections
     public class SensorTelemetry<T> where T : struct
     {
         //how many recent readings the dashboard can show at once
-        //at a reading every thirty seconds this is one hour of live view per sensor
-        public const int LiveWindowSize = 120;
+        //has to cover the signal trace ribbon, which draws four minutes
+        public const int LiveWindowSize = 300;
 
         // About six thousand readings a sensor, roughly 150 KB. Every stage is capped.
         private readonly RingBuffer<TelemetryPacket<T>> _live = new RingBuffer<TelemetryPacket<T>>(LiveWindowSize);
@@ -57,18 +57,6 @@ namespace SmartX.Api.Collections
             lock (_lock)
             {
                 return _history.ToList();
-            }
-        }
-
-        //..............................................................................//
-
-        //retrieves the newest readings held for this sensor, oldest first
-        public List<TelemetryPacket<T>> GetHistory(int take)
-        {
-            // A set number keeps the lock held for a short copy.
-            lock (_lock)
-            {
-                return _history.GetNewest(take);
             }
         }
 

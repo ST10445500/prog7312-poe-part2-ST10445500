@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 //.....................................o0oSTART OF FILEo0o........................................//
 
-// The service keeps business rules and validation away from the controller.
+// The helper keeps shared client wording and settings out of the pages that use them.
 
 namespace SmartX.Web.Services
 {

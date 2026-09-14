@@ -14,7 +14,7 @@ const string DefaultBaseUrl = "https://localhost:7002/";
 // Registered but never powered up. Gives the dashboard something silent to show.
 const string SpareNodeId = "spare-valve";
 
-// Past the ring buffer's 120 and past the batch grid's 1000. Both get exercised.
+// Past the ring buffer's 300 and past the batch grid's 1000. Both get exercised.
 const int BackfillReadings = 1200;
 
 // Windows are ten seconds wide. Spread these wider and most of them come out empty.

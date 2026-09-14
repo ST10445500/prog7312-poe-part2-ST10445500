@@ -70,46 +70,6 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
-        //retrieves every moisture reading still held for a sensor
-        public List<TelemetryPacket<MoistureReading>> GetMoistureHistory(string macAddress)
-        {
-            return Find(_environmental, macAddress)?.GetHistory() ?? new List<TelemetryPacket<MoistureReading>>();
-        }
-
-        //retrieves every power reading still held for a meter
-        public List<TelemetryPacket<PowerReading>> GetPowerHistory(string macAddress)
-        {
-            return Find(_power, macAddress)?.GetHistory() ?? new List<TelemetryPacket<PowerReading>>();
-        }
-
-        //retrieves every valve state still held for an actuator
-        public List<TelemetryPacket<bool>> GetValveHistory(string macAddress)
-        {
-            return Find(_actuators, macAddress)?.GetHistory() ?? new List<TelemetryPacket<bool>>();
-        }
-
-        //..............................................................................//
-
-        //retrieves the newest moisture readings for a sensor
-        public List<TelemetryPacket<MoistureReading>> GetMoistureHistory(string macAddress, int take)
-        {
-            return Find(_environmental, macAddress)?.GetHistory(take) ?? new List<TelemetryPacket<MoistureReading>>();
-        }
-
-        //retrieves the newest power readings for a meter
-        public List<TelemetryPacket<PowerReading>> GetPowerHistory(string macAddress, int take)
-        {
-            return Find(_power, macAddress)?.GetHistory(take) ?? new List<TelemetryPacket<PowerReading>>();
-        }
-
-        //retrieves the newest valve states for an actuator
-        public List<TelemetryPacket<bool>> GetValveHistory(string macAddress, int take)
-        {
-            return Find(_actuators, macAddress)?.GetHistory(take) ?? new List<TelemetryPacket<bool>>();
-        }
-
-        //..............................................................................//
-
         //retrieves how full the structures are for a sensor, or null if it has sent nothing
         public TelemetryUsage? GetUsage(string macAddress, SensorCategory category)
         {
@@ -129,11 +89,6 @@ namespace SmartX.Api.Services
                     return null;
             }
         }
-
-        //..............................................................................//
-
-        //retrieves how many sensors have sent telemetry so far
-        public int SensorsReporting => _environmental.Count + _power.Count + _actuators.Count;
 
         //..............................................................................//
 
