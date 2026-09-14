@@ -29,14 +29,37 @@
 </nav>
 
 <main class="sx-container sx-main">
-    @Body
+    <ErrorBoundary @ref="_errorBoundary">
+        <ChildContent>
+            @Body
+        </ChildContent>
+        <ErrorContent>
+            <div class="alert alert-danger">
+                <p>Something went wrong on this page.</p>
+                <button class="btn btn-sm btn-outline-danger" @onclick="RecoverFromError">Try again</button>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
 </main>
 
 @code {
     private bool _isNavExpanded;
+    private ErrorBoundary? _errorBoundary;
 
     private void ToggleNav()
     {
         _isNavExpanded = !_isNavExpanded;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Clears a boundary that tripped on the page the user has just left.
+        _errorBoundary?.Recover();
+    }
+
+    //puts the failed page back without a full reload
+    private void RecoverFromError()
+    {
+        _errorBoundary?.Recover();
     }
 }

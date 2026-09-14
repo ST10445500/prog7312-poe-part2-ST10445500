@@ -21,6 +21,12 @@ namespace SmartX.Api.Controllers
         //the largest file the gateway will take, in bytes
         private const long MaxUploadBytes = 25 * 1024 * 1024;
 
+        //room for the multipart boundary, headers and file name around the file
+        private const long MultipartEnvelopeBytes = 64 * 1024;
+
+        //the largest request body the gateway will read, file plus envelope
+        private const long MaxRequestBytes = MaxUploadBytes + MultipartEnvelopeBytes;
+
         private readonly SensorStore _sensors;
         private readonly AttachmentStore _attachments;
         private readonly AttachmentEncryption _encryption;
@@ -36,14 +42,25 @@ namespace SmartX.Api.Controllers
 
         //attaches a file to a sensor, encrypting it on the way to disk
         [HttpPost]
-        [RequestSizeLimit(MaxUploadBytes)]
-        public async Task<ActionResult<AttachmentSummary>> Upload(string macAddress, IFormFile file, CancellationToken token)
+        [RequestSizeLimit(MaxRequestBytes)]
+        public async Task<ActionResult<AttachmentSummary>> Upload(string macAddress, IFormFile? file, CancellationToken token)
         {
             var sensor = _sensors.Find(macAddress);
 
             if (sensor == null)
             {
                 return NotFound($"No sensor registered with MAC address {macAddress}.");
+            }
+
+            // Binding gives no file when the part is missing or named something else.
+            if (file == null)
+            {
+                return BadRequest("The request carried no file.");
+            }
+
+            if (file.Length > MaxUploadBytes)
+            {
+                return BadRequest($"The uploaded file was larger than the {MaxUploadBytes} byte limit.");
             }
 
             if (file.Length == 0)

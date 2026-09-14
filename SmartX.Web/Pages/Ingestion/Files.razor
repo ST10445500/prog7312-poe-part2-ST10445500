@@ -1,4 +1,5 @@
 @page "/ingestion/files"
+@using System.Net
 @inject HttpClient Http
 
 <PageTitle>Device Files - Smart-X</PageTitle>
@@ -124,6 +125,9 @@ else
     private const long MaxUploadBytes = 25 * 1024 * 1024;
     private const int AlertTimeoutMilliseconds = 3000;
 
+    //longest error body worth showing as it came back
+    private const int MaxErrorLength = 200;
+
     private List<SensorRegistration>? _sensors;
     private bool _loadFailed;
 
@@ -220,7 +224,7 @@ else
 
             if (!response.IsSuccessStatusCode)
             {
-                _attachmentError = await response.Content.ReadAsStringAsync();
+                _attachmentError = await DescribeFailureAsync(response);
             }
         }
         catch (HttpRequestException)
@@ -229,6 +233,24 @@ else
         }
 
         await LoadAttachmentsAsync();
+    }
+
+    //turns a failed response into something worth showing
+    private static async Task<string> DescribeFailureAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.RequestEntityTooLarge)
+        {
+            return $"The gateway refused that file. The limit is {FormatFileSize(MaxUploadBytes)}.";
+        }
+
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (string.IsNullOrWhiteSpace(body) || body.Length > MaxErrorLength)
+        {
+            return $"The gateway refused that request ({(int)response.StatusCode}).";
+        }
+
+        return body;
     }
 
     private static string FormatFileSize(long bytes)
@@ -246,17 +268,46 @@ else
         return $"{bytes / (1024.0 * 1024.0):0.#} MB";
     }
 
+    //takes the chosen file if the browser handed over exactly one that fits
     private void OnFileSelected(InputFileChangeEventArgs e)
     {
-        _selectedFile = e.File;
+        _selectedFile = null;
         _uploadSucceeded = false;
         _attachmentError = null;
+
+        // Reading e.File throws unless there is exactly one file.
+        if (e.FileCount == 0)
+        {
+            return;
+        }
+
+        if (e.FileCount > 1)
+        {
+            _attachmentError = "One file at a time.";
+            return;
+        }
+
+        var file = e.File;
+
+        if (file.Size > MaxUploadBytes)
+        {
+            _attachmentError = $"That file is {FormatFileSize(file.Size)}, over the {FormatFileSize(MaxUploadBytes)} limit.";
+            return;
+        }
+
+        _selectedFile = file;
     }
 
     private async Task UploadAsync()
     {
         if (_selectedFile == null)
         {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_attachmentsMac))
+        {
+            _attachmentError = "Pick a device before attaching a document.";
             return;
         }
 
@@ -281,12 +332,16 @@ else
             }
             else
             {
-                _attachmentError = await response.Content.ReadAsStringAsync();
+                _attachmentError = await DescribeFailureAsync(response);
             }
         }
         catch (HttpRequestException)
         {
             _attachmentError = "Could not reach the gateway API.";
+        }
+        catch (IOException problem)
+        {
+            _attachmentError = $"That file could not be read. {problem.Message}";
         }
         finally
         {
