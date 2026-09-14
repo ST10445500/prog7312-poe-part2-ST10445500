@@ -1,0 +1,189 @@
+@page "/ingestion"
+@inject HttpClient Http
+@implements IDisposable
+
+<PageTitle>Ingestion Overview - Smart-X</PageTitle>
+
+<PageHeader Title="Sensor Data Ingestion and Telemetry"
+            Blurb="Where the fleet stands right now. The gateway takes readings from every registered device, sorts out the ones behaving oddly and keeps the deployment tree in order.">
+    <IngestionNav />
+</PageHeader>
+
+<ApiErrorAlert Show="_loadFailed" />
+
+@if (_sensors == null && !_loadFailed)
+{
+    <LoadingBlock />
+}
+else if (_sensors is { Count: 0 })
+{
+    <EmptyState>
+        No sensors registered yet. <a href="ingestion/fleet">Register one</a> to get started.
+    </EmptyState>
+}
+else if (_sensors != null)
+{
+    <div class="d-flex justify-content-end mb-2">
+        @if (_lastUpdated != null)
+        {
+            <span class="text-muted small">
+                <span class="live-dot me-1"></span>Updated @_lastUpdated.Value.ToLocalTime().ToString("HH:mm:ss")
+            </span>
+        }
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg">
+            <StatTile Label="Registered" Value="@_sensors.Count.ToString()" Note="devices on the gateway" />
+        </div>
+        <div class="col-6 col-lg">
+            <StatTile Label="Reporting" Value="@Count(TelemetryStatus.Normal).ToString()" Note="behaving normally" />
+        </div>
+        <div class="col-6 col-lg">
+            <StatTile Label="Sharp change" Value="@Count(TelemetryStatus.Spike).ToString()" Note="spiked recently" ValueClass="@(Count(TelemetryStatus.Spike) > 0 ? "stat-value-warn" : "")" />
+        </div>
+        <div class="col-6 col-lg">
+            <StatTile Label="Silent" Value="@Count(TelemetryStatus.Silent).ToString()" Note="nothing received" ValueClass="@(Count(TelemetryStatus.Silent) > 0 ? "stat-value-fault" : "")" />
+        </div>
+        <div class="col-12 col-lg">
+            <StatTile Label="Fleet load" Value="@(_fleetLoad?.TotalLoad ?? "-")" Note="@FleetLoadNote" />
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5 card-title">Needs a look</h2>
+            <p class="text-muted small">
+                Only the sensors that spiked or went quiet show up here, so a settled
+                fleet stays out of the way.
+            </p>
+
+            @if (NothingHasReported)
+            {
+                <p class="text-muted mb-0">
+                    Nothing has reported yet. Run <code>SmartX.Simulator</code> and the
+                    readings start arriving a few seconds later.
+                </p>
+            }
+            else if (Unsettled.Count == 0)
+            {
+                <p class="text-muted mb-0">Every sensor is reporting normally.</p>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @foreach (var sensor in Unsettled)
+                    {
+                        <div class="col-12 col-lg-6">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div>
+                                    <span class="fw-semibold">@sensor.Location.NodeId</span>
+                                    <span class="text-muted small ms-2">@SensorFormatting.DescribeLocation(sensor.Location)</span>
+                                </div>
+                                <span class="font-monospace">@SensorFormatting.DescribeLatestReading(sensor)</span>
+                            </div>
+                            <SignalRibbon Health="sensor.Health" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-12 col-md-4">
+        <a class="card link-card" href="ingestion/fleet">
+            <div class="card-body">
+                <h2 class="h6 card-title">Fleet</h2>
+                <p class="card-text text-muted small mb-0">
+                    Every registered device with its latest reading and signal trace.
+                    Register a new sensor or post a reading by hand.
+                </p>
+            </div>
+        </a>
+    </div>
+    <div class="col-12 col-md-4">
+        <a class="card link-card" href="ingestion/deployment">
+            <div class="card-body">
+                <h2 class="h6 card-title">Deployment</h2>
+                <p class="card-text text-muted small mb-0">
+                    The site, zone and room tree the sensors sit in, checked all the
+                    way down before it is saved.
+                </p>
+            </div>
+        </a>
+    </div>
+    <div class="col-12 col-md-4">
+        <a class="card link-card" href="ingestion/files">
+            <div class="card-body">
+                <h2 class="h6 card-title">Device Files</h2>
+                <p class="card-text text-muted small mb-0">
+                    Calibration sheets and firmware notes attached to a sensor profile,
+                    encrypted on the way in.
+                </p>
+            </div>
+        </a>
+    </div>
+</div>
+
+@code {
+    private const int PollIntervalMilliseconds = 4000;
+
+    private List<SensorOverview>? _sensors;
+    private FleetLoad? _fleetLoad;
+    private bool _loadFailed;
+    private DateTime? _lastUpdated;
+    private System.Timers.Timer? _pollTimer;
+
+    private List<SensorOverview> Unsettled =>
+        _sensors?.Where(sensor => sensor.Health.Status != TelemetryStatus.Normal).ToList()
+            ?? new List<SensorOverview>();
+
+    private bool NothingHasReported =>
+        _sensors?.All(sensor => sensor.LatestRecordedAt == null) ?? false;
+
+    private string FleetLoadNote =>
+        _fleetLoad is { MetersReporting: > 0 }
+            ? $"across {_fleetLoad.MetersReporting} {(_fleetLoad.MetersReporting == 1 ? "meter" : "meters")}"
+            : "no meters reporting";
+
+    private int Count(TelemetryStatus status)
+    {
+        return _sensors?.Count(sensor => sensor.Health.Status == status) ?? 0;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOverviewAsync();
+
+        _pollTimer = new System.Timers.Timer(PollIntervalMilliseconds);
+        _pollTimer.Elapsed += async (_, _) => await InvokeAsync(async () =>
+        {
+            await LoadOverviewAsync();
+            StateHasChanged();
+        });
+        _pollTimer.AutoReset = true;
+        _pollTimer.Start();
+    }
+
+    private async Task LoadOverviewAsync()
+    {
+        try
+        {
+            _sensors = await Http.GetFromJsonAsync<List<SensorOverview>>("api/telemetry/overview", ApiJsonOptions.Default);
+            _fleetLoad = await Http.GetFromJsonAsync<FleetLoad>("api/telemetry/load", ApiJsonOptions.Default);
+            _loadFailed = false;
+            _lastUpdated = DateTime.UtcNow;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _loadFailed = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+}

@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 
 <nav class="navbar navbar-expand-md navbar-light mb-4">
-    <div class="container">
+    <div class="sx-container">
         <a class="navbar-brand fw-semibold" href="/">Smart-X</a>
         <button class="navbar-toggler" type="button" @onclick="ToggleNav">
             <span class="navbar-toggler-icon"></span>
@@ -9,13 +9,8 @@
         <div class="collapse navbar-collapse @(_isNavExpanded ? "show" : "")">
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                    <NavLink class="nav-link" href="ingestion/sensors" title="Sensor Data Ingestion and Telemetry">
-                        Sensors
-                    </NavLink>
-                </li>
-                <li class="nav-item">
-                    <NavLink class="nav-link" href="ingestion/telemetry" title="Sensor Data Ingestion and Telemetry">
-                        Telemetry
+                    <NavLink class="nav-link" href="ingestion" title="Sensor Data Ingestion and Telemetry">
+                        Ingestion
                     </NavLink>
                 </li>
                 <li class="nav-item">
@@ -33,7 +28,7 @@
     </div>
 </nav>
 
-<main class="container">
+<main class="sx-container sx-main">
     @Body
 </main>
 

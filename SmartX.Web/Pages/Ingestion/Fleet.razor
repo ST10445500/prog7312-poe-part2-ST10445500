@@ -1,0 +1,406 @@
+@page "/ingestion/fleet"
+@inject HttpClient Http
+@implements IDisposable
+
+<PageTitle>Fleet - Smart-X</PageTitle>
+
+<PageHeader Title="Fleet"
+            Blurb="Every device registered with the gateway, with the reading it sent last and the Signal Trace ribbon showing how it has been behaving.">
+    <IngestionNav />
+</PageHeader>
+
+<ApiErrorAlert Show="_loadFailed" />
+
+@if (_registerSucceeded)
+{
+    <div class="alert alert-success">
+        Sensor registered. Put it somewhere on the <a href="ingestion/deployment">deployment</a> page.
+    </div>
+}
+
+@if (_sensors == null && !_loadFailed)
+{
+    <LoadingBlock />
+}
+else if (_sensors is { Count: 0 })
+{
+    <EmptyState>
+        No sensors registered yet. Use the form below to add the first one.
+    </EmptyState>
+}
+else if (_sensors != null)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <FleetSummary Sensors="_sensors" Load="_fleetLoad" />
+
+        @if (_lastUpdated != null)
+        {
+            <span class="text-muted small">
+                <span class="live-dot me-1"></span>Updated @_lastUpdated.Value.ToLocalTime().ToString("HH:mm:ss")
+            </span>
+        }
+    </div>
+
+    <div class="table-responsive mb-4">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Sensor</th>
+                    <th>Mac Address</th>
+                    <th>Location</th>
+                    <th>Category</th>
+                    <th>Latest</th>
+                    <th class="signal-cell">Signal Trace</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var sensor in _sensors)
+                {
+                    <tr>
+                        <td>
+                            <div>@sensor.Location.NodeId</div>
+                            <span class="text-muted small">@DescribeRegistered(sensor.MacAddress)</span>
+                        </td>
+                        <td class="font-monospace">@sensor.MacAddress</td>
+                        <td>@SensorFormatting.DescribeLocation(sensor.Location)</td>
+                        <td>@sensor.Category</td>
+                        <td>
+                            <div class="font-monospace">@SensorFormatting.DescribeLatestReading(sensor)</div>
+                            @if (sensor.LatestRecordedAt != null)
+                            {
+                                <span class="text-muted small">@sensor.LatestRecordedAt.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+                            }
+                        </td>
+                        <td class="signal-cell">
+                            <SignalRibbon Health="sensor.Health" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Register a sensor</h2>
+                <p class="text-muted small">
+                    The gateway only accepts readings from a device it already knows,
+                    so a new sensor is registered by its mac address first.
+                </p>
+
+                <EditForm Model="_newSensor" OnValidSubmit="RegisterAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    @if (_registerError != null)
+                    {
+                        <div class="alert alert-danger">@_registerError</div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label">Mac Address</label>
+                            <InputText class="form-control font-monospace" @bind-Value="_newSensor.MacAddress" placeholder="AA:BB:CC:DD:EE:FF" />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_newSensor.Location.NodeId" placeholder="soil probe" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Category</label>
+                            <InputSelect class="form-select field-wide" @bind-Value="_newSensor.Category">
+                                @foreach (var category in Enum.GetValues<SensorCategory>())
+                                {
+                                    <option value="@category">@category</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+
+                    <BusyButton Type="submit"
+                                CssClass="btn btn-primary mt-3"
+                                Label="Register"
+                                BusyLabel="Registering..."
+                                Busy="_isSubmitting" />
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Record a test reading</h2>
+                <p class="text-muted small">
+                    The simulator reports for the fleet on its own, and this posts one reading
+                    by hand through the same <code>/api/telemetry</code> endpoint it and a real
+                    device both use.
+                </p>
+
+                @if (_sensors is not { Count: > 0 })
+                {
+                    <p class="text-muted mb-0">Register a sensor first.</p>
+                }
+                else
+                {
+                    @if (_readingSucceeded)
+                    {
+                        <div class="alert alert-success">Reading recorded.</div>
+                    }
+                    @if (_readingError != null)
+                    {
+                        <div class="alert alert-danger">@_readingError</div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-7">
+                            <label class="form-label">Sensor</label>
+                            <select class="form-select" @bind="_selectedMac">
+                                @foreach (var sensor in _sensors)
+                                {
+                                    <option value="@sensor.MacAddress">@sensor.MacAddress (@sensor.Category)</option>
+                                }
+                            </select>
+                        </div>
+
+                        @if (SelectedCategory is SensorCategory.Environmental or SensorCategory.PowerConsumption)
+                        {
+                            <div class="col-12 col-sm-5">
+                                <label class="form-label">
+                                    @(SelectedCategory == SensorCategory.Environmental ? "Value (%)" : "Value (W)")
+                                </label>
+                                <input type="number" class="form-control" @bind="_testValue" @bind:event="oninput" />
+                            </div>
+                        }
+                        else if (SelectedCategory == SensorCategory.Actuator)
+                        {
+                            <div class="col-12 col-sm-5">
+                                <label class="form-label">State</label>
+                                <select class="form-select" @bind="_testState">
+                                    <option value="@(true)">Open</option>
+                                    <option value="@(false)">Closed</option>
+                                </select>
+                            </div>
+                        }
+
+                        @if (ValueProblem != null)
+                        {
+                            <div class="col-12">
+                                <span class="validation-message">@ValueProblem</span>
+                            </div>
+                        }
+                    </div>
+
+                    <BusyButton CssClass="btn btn-primary mt-3"
+                                Label="Record Reading"
+                                BusyLabel="Recording..."
+                                Busy="_isSubmittingReading"
+                                Disabled="@(ValueProblem != null)"
+                                OnClick="RecordTestReadingAsync" />
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const int PollIntervalMilliseconds = 4000;
+    private const int AlertTimeoutMilliseconds = 3000;
+
+    private List<SensorOverview>? _sensors;
+    private Dictionary<string, DateTime> _registeredAt = new();
+    private FleetLoad? _fleetLoad;
+    private bool _loadFailed;
+    private DateTime? _lastUpdated;
+    private System.Timers.Timer? _pollTimer;
+
+    private SensorRegistration _newSensor = new();
+    private bool _isSubmitting;
+    private bool _registerSucceeded;
+    private string? _registerError;
+
+    private string _selectedMac = string.Empty;
+    private double? _testValue;
+    private bool _testState;
+    private bool _isSubmittingReading;
+    private bool _readingSucceeded;
+    private string? _readingError;
+
+    private SensorCategory? SelectedCategory =>
+        _sensors?.FirstOrDefault(sensor => sensor.MacAddress == _selectedMac)?.Category;
+
+    private string? ValueProblem =>
+        SensorFormatting.DescribeReadingProblem(SelectedCategory, _testValue);
+
+    private string DescribeRegistered(string macAddress)
+    {
+        return _registeredAt.TryGetValue(macAddress, out var registered)
+            ? $"Registered {registered.ToLocalTime():d MMM}"
+            : string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRegistrationsAsync();
+        await LoadOverviewAsync();
+
+        _pollTimer = new System.Timers.Timer(PollIntervalMilliseconds);
+        _pollTimer.Elapsed += async (_, _) => await InvokeAsync(async () =>
+        {
+            await LoadOverviewAsync();
+            StateHasChanged();
+        });
+        _pollTimer.AutoReset = true;
+        _pollTimer.Start();
+    }
+
+    private async Task LoadRegistrationsAsync()
+    {
+        // The overview carries everything a row shows except when the device was
+        // first accepted, and that only changes when something is registered.
+        try
+        {
+            var registrations = await Http.GetFromJsonAsync<List<SensorRegistration>>("api/sensors", ApiJsonOptions.Default);
+
+            _registeredAt = registrations?.ToDictionary(sensor => sensor.MacAddress, sensor => sensor.RegisteredAt)
+                ?? new Dictionary<string, DateTime>();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _loadFailed = true;
+        }
+    }
+
+    private async Task LoadOverviewAsync()
+    {
+        try
+        {
+            _sensors = await Http.GetFromJsonAsync<List<SensorOverview>>("api/telemetry/overview", ApiJsonOptions.Default);
+            _fleetLoad = await Http.GetFromJsonAsync<FleetLoad>("api/telemetry/load", ApiJsonOptions.Default);
+            _loadFailed = false;
+            _lastUpdated = DateTime.UtcNow;
+
+            // Keeps a sensor selected in the test-reading form once the fleet has
+            // loaded, rather than leaving the dropdown on a blank first option.
+            if (string.IsNullOrEmpty(_selectedMac) && _sensors is { Count: > 0 })
+            {
+                _selectedMac = _sensors[0].MacAddress;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _loadFailed = true;
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        _isSubmitting = true;
+        _registerSucceeded = false;
+        _registerError = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/sensors", _newSensor, ApiJsonOptions.Default);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _registerSucceeded = true;
+                _newSensor = new SensorRegistration();
+
+                await LoadRegistrationsAsync();
+                await LoadOverviewAsync();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _registerError = await response.Content.ReadAsStringAsync();
+            }
+            else
+            {
+                _registerError = "The gateway rejected that registration.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _registerError = "Could not reach the gateway API.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+
+        await ClearRegisterSuccessAsync();
+    }
+
+    private async Task ClearRegisterSuccessAsync()
+    {
+        if (!_registerSucceeded)
+        {
+            return;
+        }
+
+        // Without this render the flag would be set and cleared inside one pass,
+        // so the alert would never actually appear.
+        StateHasChanged();
+        await Task.Delay(AlertTimeoutMilliseconds);
+        _registerSucceeded = false;
+    }
+
+    private async Task RecordTestReadingAsync()
+    {
+        _isSubmittingReading = true;
+        _readingSucceeded = false;
+        _readingError = null;
+
+        try
+        {
+            var reading = SelectedCategory == SensorCategory.Actuator
+                ? new TestReading(_selectedMac, null, _testState)
+                : new TestReading(_selectedMac, _testValue, null);
+
+            var response = await Http.PostAsJsonAsync("api/telemetry", reading, ApiJsonOptions.Default);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _readingSucceeded = true;
+                await LoadOverviewAsync();
+            }
+            else
+            {
+                _readingError = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _readingError = "Could not reach the gateway API.";
+        }
+        finally
+        {
+            _isSubmittingReading = false;
+        }
+
+        await ClearReadingSuccessAsync();
+    }
+
+    private async Task ClearReadingSuccessAsync()
+    {
+        if (!_readingSucceeded)
+        {
+            return;
+        }
+
+        StateHasChanged();
+        await Task.Delay(AlertTimeoutMilliseconds);
+        _readingSucceeded = false;
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+
+    private record TestReading(string MacAddress, double? Value, bool? State);
+}

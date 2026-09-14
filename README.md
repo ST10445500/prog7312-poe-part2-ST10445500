@@ -115,14 +115,18 @@ Both routes can run at the same time. Docker uses ports 8080 and 8081, and
 
 ## Finding the features
 
-Everything below is reachable from the top navigation.
+**Ingestion** in the top navigation opens the overview dashboard at
+`/ingestion`. That is the landing page for the whole pillar: how many sensors are
+registered, how many are reporting normally, which ones spiked or went quiet, and
+the total fleet load. Everything below is one click from there, either on a card
+or on the strip under the heading.
 
-**Registering a sensor.** Sensors page, **Register** tab. A device needs a MAC
+**Registering a sensor.** Fleet page. A device needs a MAC
 address, a name and a category. The form validates the MAC against a pattern
 before anything is posted, and the API turns away a duplicate MAC with a 409.
 
-**The deployment hierarchy and the recursive validator.** Sensors page,
-**Hierarchy** tab. A newly registered sensor starts unplaced at the top and is
+**The deployment hierarchy and the recursive validator.** Deployment page. A
+newly registered sensor starts unplaced at the top and is
 dragged into a zone or room; saving writes each sensor's location back from
 where it sits. Press **Edit deployment**, then **JSON**, for two demo buttons:
 *Broken tree* posts a tree that names a sensor the gateway has never seen, and
@@ -130,13 +134,14 @@ where it sits. Press **Edit deployment**, then **JSON**, for two demo buttons:
 back as a clean list of errors rather than a crash, which is the point of the
 depth guard.
 
-**Encrypted file upload.** Sensors page, **Files** tab. Pick a sensor and attach
+**Encrypted file upload.** Device Files page. Pick a sensor and attach
 a configuration file, deployment photo or hardware log. The file is encrypted
 with AES-256 on its way to disk and decrypted on its way back out, so the copy
 stored on the server is never readable. Uploads are capped at 25MB on both
 sides. Download one to confirm it round-trips.
 
-**Signal Trace, the engagement feature.** Telemetry page. Each sensor gets a
+**Signal Trace, the engagement feature.** Fleet page, in the Signal Trace column,
+and on the overview dashboard for anything misbehaving. Each sensor gets a
 ribbon of fixed time windows, oldest to newest, so both of the failure modes
 that matter show up as a break in one pattern:
 
@@ -147,7 +152,8 @@ that matter show up as a break in one pattern:
 Colour is never the only cue. Hover any block for the reading count and the
 largest change inside that window.
 
-To make one happen on demand, use **Record a Test Reading** on the same page. It
+To make one happen on demand, use **Record a test reading** at the bottom of the
+Fleet page. It
 posts through the same `/api/telemetry` endpoint the simulator and a real device
 use. Post a wattage more than 50W away from the last one, or a moisture value
 more than 15% away, and that window turns into a spike. Stop the simulator and
