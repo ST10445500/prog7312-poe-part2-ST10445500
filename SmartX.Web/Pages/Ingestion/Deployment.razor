@@ -66,7 +66,7 @@
                     </button>
                 </div>
 
-                <textarea class="form-control font-monospace" rows="12" @bind="_editJson"></textarea>
+                <textarea class="form-control font-monospace" rows="12" @bind="EditJson" @bind:event="oninput"></textarea>
 
                 <div class="mt-2">
                     <button class="btn btn-sm btn-outline-secondary me-2" @onclick="ApplyJson">Apply JSON</button>
@@ -183,6 +183,25 @@
     private bool _jsonMode;
     private string _editJson = string.Empty;
     private string? _jsonParseError;
+
+    //the text in the json editor
+    private string EditJson
+    {
+        get => _editJson;
+        set
+        {
+            if (_editJson == value)
+            {
+                return;
+            }
+
+            _editJson = value;
+            _jsonParseError = null;
+
+            // Any earlier result describes a tree that is no longer on screen.
+            OnEditTreeChanged();
+        }
+    }
 
     private string DefaultMacAddress =>
         _sensors is { Count: > 0 } ? _sensors[0].MacAddress : "AA:BB:CC:DD:EE:FF";
@@ -324,6 +343,12 @@
 
     private async Task ValidateEditAsync()
     {
+        // The check has to answer for the text on screen, not the tree last applied.
+        if (_jsonMode && !TryApplyEditJson())
+        {
+            return;
+        }
+
         if (_editTree == null)
         {
             return;
@@ -403,14 +428,12 @@
 
     private void LoadBrokenExample()
     {
-        _editJson = JsonSerializer.Serialize(BuildBrokenExample(), TreeDisplayOptions);
-        _jsonParseError = null;
+        EditJson = JsonSerializer.Serialize(BuildBrokenExample(), TreeDisplayOptions);
     }
 
     private void LoadDeepExample()
     {
-        _editJson = JsonSerializer.Serialize(BuildDeepExample(), TreeDisplayOptions);
-        _jsonParseError = null;
+        EditJson = JsonSerializer.Serialize(BuildDeepExample(), TreeDisplayOptions);
     }
 
     //a tree with a duplicate sibling name and a sensor that also has a child
@@ -479,6 +502,17 @@
 
     private void ApplyJson()
     {
+        if (!TryApplyEditJson())
+        {
+            return;
+        }
+
+        _jsonMode = false;
+    }
+
+    //reads the editor text into the tree, reporting what it cannot parse
+    private bool TryApplyEditJson()
+    {
         DeploymentNode? tree;
 
         try
@@ -488,19 +522,19 @@
         catch (JsonException problem)
         {
             _jsonParseError = $"That is not valid JSON. {problem.Message}";
-            return;
+            return false;
         }
 
         if (tree == null)
         {
             _jsonParseError = "That is not valid JSON.";
-            return;
+            return false;
         }
 
         _editTree = tree;
         _jsonParseError = null;
-        _jsonMode = false;
 
         OnEditTreeChanged();
+        return true;
     }
 }
