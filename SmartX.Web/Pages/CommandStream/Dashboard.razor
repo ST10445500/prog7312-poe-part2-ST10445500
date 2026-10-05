@@ -1,12 +1,30 @@
 @page "/commandstream"
+@inject DashboardState State
+@implements IDisposable
 
 <PageTitle>Command Stream - Smart-X</PageTitle>
 
 <PageHeader Title="Command Stream"
             Blurb="Readings as they come off the queue, and the overrides sent back to devices." />
 
+<div class="mb-3">
+    <input class="form-control font-monospace" placeholder="Search by MAC address" @bind="State.SearchText" @bind:event="oninput" />
+</div>
+
 <div class="card">
     <div class="card-body text-center text-muted py-5">
         Nothing to show yet.
     </div>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        State.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        State.OnChange -= StateHasChanged;
+    }
+}

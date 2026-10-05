@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using SmartX.Web;
+using SmartX.Web.Services;
 
 //ST10445500 - PROG7312 - SmartX POE
 //Program
@@ -16,6 +17,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // Falling back to our own origin makes a missing setting show up as a failed call.
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+builder.Services.AddScoped<DashboardState>();
 
 await builder.Build().RunAsync();
 
