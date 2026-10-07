@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SmartX.Api.Collections;
+using SmartX.Api.Models.Stream;
 using SmartX.Api.Models.Telemetry;
 using SmartX.Api.Services;
 using SmartX.Shared.Models;
@@ -31,12 +32,14 @@ namespace SmartX.Api.Controllers
         private readonly SensorStore _sensors;
         private readonly TelemetryStore _telemetry;
         private readonly TelemetryHealth _health;
+        private readonly PacketQueue<StreamPacket> _stream;
 
-        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health)
+        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health, PacketQueue<StreamPacket> stream)
         {
             _sensors = sensors;
             _telemetry = telemetry;
             _health = health;
+            _stream = stream;
         }
 
         //..............................................................................//
@@ -51,6 +54,9 @@ namespace SmartX.Api.Controllers
             {
                 return BadRequest(reason);
             }
+
+            // Only live posts go on the stream. A backfill batch would bury it.
+            EnqueueForStream(reading);
 
             return Accepted();
         }
@@ -197,6 +203,36 @@ namespace SmartX.Api.Controllers
                 // Built here to keep the overview a single round trip.
                 Health = _health.Build(sensor, TelemetryHealth.DefaultWindowCount, TelemetryHealth.DefaultWindowSeconds, DateTime.UtcNow)
             };
+        }
+
+        //..............................................................................//
+
+        //puts an accepted reading on the stream queue with the radio details it came with
+        private void EnqueueForStream(IncomingReading reading)
+        {
+            var sensor = _sensors.Find(reading.MacAddress);
+
+            if (sensor == null)
+            {
+                return;
+            }
+
+            _stream.Enqueue(new StreamPacket
+            {
+                MacAddress = sensor.MacAddress,
+                Category = sensor.Category,
+                Value = reading.Value,
+                State = reading.State,
+                RecordedAt = reading.RecordedAt ?? DateTime.UtcNow,
+                Radio = new RadioStats
+                {
+                    Rssi = reading.Rssi,
+                    HopCount = reading.HopCount,
+                    DutyCycle = reading.DutyCycle,
+                    PacketLoss = reading.PacketLoss,
+                    Protocol = reading.Protocol
+                }
+            });
         }
 
         //..............................................................................//

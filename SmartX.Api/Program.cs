@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using SmartX.Api.Collections;
+using SmartX.Api.Models.Stream;
 using SmartX.Api.Services;
 
 //ST10445500 - PROG7312 - SmartX POE
@@ -18,6 +20,9 @@ builder.Services.AddSingleton<TelemetryStore>();
 builder.Services.AddSingleton<TelemetryHealth>();
 builder.Services.AddSingleton<AttachmentStore>();
 builder.Services.AddSingleton<AttachmentEncryption>();
+builder.Services.AddSingleton<PacketQueue<StreamPacket>>();
+builder.Services.AddSingleton<DeviceCache>();
+builder.Services.AddHostedService<StreamProcessor>();
 
 // Category names arrive as strings.
 builder.Services.AddControllers()
