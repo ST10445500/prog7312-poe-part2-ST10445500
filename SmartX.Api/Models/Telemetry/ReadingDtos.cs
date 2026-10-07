@@ -22,6 +22,21 @@ namespace SmartX.Api.Models.Telemetry
 
         //when the device took the reading, or null to use the time it arrived
         public DateTime? RecordedAt { get; set; }
+
+        //signal strength the gateway heard the device at, in dBm, or null if the device did not say
+        public int? Rssi { get; set; }
+
+        //how many hops the packet took to reach the gateway
+        public int? HopCount { get; set; }
+
+        //the share of airtime the radio has used, as a percentage
+        public double? DutyCycle { get; set; }
+
+        //the share of packets lost on the way, as a percentage
+        public double? PacketLoss { get; set; }
+
+        //the radio protocol in use, such as ESP-NOW, Zigbee or Thread
+        public string? Protocol { get; set; }
     }
 
     //..............................................................................//

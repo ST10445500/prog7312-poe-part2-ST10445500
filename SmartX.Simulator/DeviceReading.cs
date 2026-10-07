@@ -22,6 +22,13 @@ namespace SmartX.Simulator
 
         //when the device took the reading, which the gateway keeps instead of the arrival time
         public DateTime? RecordedAt { get; set; }
+
+        //signal strength in dBm, hop count, duty cycle and packet loss as percentages, and the protocol
+        public int? Rssi { get; set; }
+        public int? HopCount { get; set; }
+        public double? DutyCycle { get; set; }
+        public double? PacketLoss { get; set; }
+        public string? Protocol { get; set; }
     }
 }
 

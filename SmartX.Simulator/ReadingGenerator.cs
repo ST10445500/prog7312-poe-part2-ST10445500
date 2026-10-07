@@ -40,6 +40,14 @@ namespace SmartX.Simulator
         // A task per sensor means a shared Random would be drawn from at once.
         private readonly Random _random;
 
+        //the radios a device might be built on
+        private static readonly string[] Protocols = ["ESP-NOW", "Zigbee", "Thread"];
+
+        //where this device's signal sits, so one device stays weak and another stays strong
+        private readonly int _baseRssi;
+        private readonly int _hopCount;
+        private readonly string _protocol;
+
         private double _value;
         private bool _state;
 
@@ -47,6 +55,10 @@ namespace SmartX.Simulator
         {
             _category = category;
             _random = new Random(seed);
+
+            _baseRssi = -50 - _random.Next(36);
+            _hopCount = 1 + _random.Next(3);
+            _protocol = Protocols[seed % Protocols.Length];
 
             _value = category == SensorCategory.PowerConsumption
                 ? (MinWatts + MaxWatts) / 2
@@ -61,7 +73,12 @@ namespace SmartX.Simulator
             var reading = new DeviceReading
             {
                 MacAddress = macAddress,
-                RecordedAt = recordedAt
+                RecordedAt = recordedAt,
+                Rssi = _baseRssi + _random.Next(-3, 4),
+                HopCount = _hopCount,
+                DutyCycle = Math.Round(_random.NextDouble() * 4, 1),
+                PacketLoss = Math.Round(_random.NextDouble() * 3, 1),
+                Protocol = _protocol
             };
 
             switch (_category)
