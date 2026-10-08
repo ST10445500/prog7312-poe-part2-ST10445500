@@ -22,6 +22,8 @@ builder.Services.AddSingleton<AttachmentStore>();
 builder.Services.AddSingleton<AttachmentEncryption>();
 builder.Services.AddSingleton<PacketQueue<StreamPacket>>();
 builder.Services.AddSingleton<DeviceCache>();
+builder.Services.AddSingleton<CommandHistory<PumpCommand>>();
+builder.Services.AddSingleton<CommandService>();
 builder.Services.AddHostedService<StreamProcessor>();
 
 // Category names arrive as strings.

@@ -238,3 +238,44 @@ GET {{SmartX.Api_HostAddress}}/api/sensors/AA:BB:CC:DD:EE:01/attachments/0000000
 
 ### deleting an attachment that does not exist should 404
 DELETE {{SmartX.Api_HostAddress}}/api/sensors/AA:BB:CC:DD:EE:01/attachments/00000000000000000000000000000000
+
+### the command stream snapshot, queue depth plus every device the processor has seen
+GET {{SmartX.Api_HostAddress}}/api/stream/snapshot
+
+### the same devices narrowed by a piece of a mac address
+GET {{SmartX.Api_HostAddress}}/api/stream/devices?search=EE:03
+
+### post a reading with the radio fields so the stream has rssi, hops and protocol to show
+POST {{SmartX.Api_HostAddress}}/api/telemetry
+Content-Type: application/json
+
+{
+  "macAddress": "AA:BB:CC:DD:EE:03",
+  "state": false,
+  "rssi": -71,
+  "hopCount": 2,
+  "dutyCycle": 1.5,
+  "packetLoss": 0.8,
+  "protocol": "Zigbee"
+}
+
+### open the valve by hand
+POST {{SmartX.Api_HostAddress}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "AA:BB:CC:DD:EE:03", "open": true }
+
+### a command to a moisture sensor should 400
+POST {{SmartX.Api_HostAddress}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "AA:BB:CC:DD:EE:01", "open": true }
+
+### a command to an unregistered mac should 404
+POST {{SmartX.Api_HostAddress}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "00:00:00:00:00:00", "open": true }
+
+### undo the newest override, a second undo with nothing left should 409
+POST {{SmartX.Api_HostAddress}}/api/commands/undo

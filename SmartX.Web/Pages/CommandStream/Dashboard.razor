@@ -1,4 +1,5 @@
 @page "/commandstream"
+@inject HttpClient Http
 @inject DashboardState State
 @implements IDisposable
 
@@ -7,24 +8,205 @@
 <PageHeader Title="Command Stream"
             Blurb="Readings as they come off the queue, and the overrides sent back to devices." />
 
+@if (_loadFailed)
+{
+    <div class="alert alert-danger">
+        Cannot reach the gateway. What is shown may be out of date.
+    </div>
+}
+
 <div class="mb-3">
     <input class="form-control font-monospace" placeholder="Search by MAC address" @bind="State.SearchText" @bind:event="oninput" />
 </div>
 
-<div class="card">
-    <div class="card-body text-center text-muted py-5">
-        Nothing to show yet.
+@if (_snapshot == null && !_loadFailed)
+{
+    <div class="text-center text-muted py-4">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        Loading...
     </div>
-</div>
+}
+else if (_snapshot != null)
+{
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <StatTile Label="Queue depth" Value="@_snapshot.QueueDepth.ToString()" Note="packets waiting" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Devices" Value="@_snapshot.Devices.Count.ToString()" Note="seen on the stream" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Undo stack" Value="@_snapshot.UndoDepth.ToString()" Note="overrides that can be undone" />
+        </div>
+    </div>
+
+    @if (_commandMessage != null)
+    {
+        <div class="alert @(_commandFailed ? "alert-danger" : "alert-success")">@_commandMessage</div>
+    }
+
+    <div class="mb-3">
+        <BusyButton CssClass="btn btn-outline-secondary btn-sm"
+                    Label="Undo last override"
+                    BusyLabel="Undoing..."
+                    Busy="_isSending"
+                    OnClick="UndoAsync" />
+    </div>
+
+    @if (_snapshot.Devices.Count == 0)
+    {
+        <div class="card">
+            <div class="card-body text-center text-muted py-5">
+                No devices have reported yet. Start the simulator and they will show up here.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Mac Address</th>
+                        <th>Latest</th>
+                        <th>RSSI</th>
+                        <th>Hops</th>
+                        <th>Protocol</th>
+                        <th>Last seen</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var device in _snapshot.Devices)
+                    {
+                        <tr>
+                            <td>@device.Name</td>
+                            <td class="font-monospace">@device.MacAddress</td>
+                            <td class="font-monospace">@device.Reading</td>
+                            <td>@(device.Radio.Rssi?.ToString() ?? "-") dBm</td>
+                            <td>@(device.Radio.HopCount?.ToString() ?? "-")</td>
+                            <td>@(device.Radio.Protocol ?? "-")</td>
+                            <td class="text-muted small">@device.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
+                            <td class="text-end">
+                                @if (device.Category == SensorCategory.Actuator)
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary" disabled="@_isSending"
+                                            @onclick="() => SendAsync(device.MacAddress, true)">Open</button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_isSending"
+                                            @onclick="() => SendAsync(device.MacAddress, false)">Close</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
 
 @code {
-    protected override void OnInitialized()
+    private const int PollIntervalMilliseconds = 1000;
+
+    private StreamSnapshot? _snapshot;
+    private bool _loadFailed;
+    private CancellationTokenSource? _polling;
+
+    private bool _isSending;
+    private bool _commandFailed;
+    private string? _commandMessage;
+
+    protected override async Task OnInitializedAsync()
     {
-        State.OnChange += StateHasChanged;
+        State.OnChange += OnStateChanged;
+
+        await LoadSnapshotAsync();
+
+        _polling = new CancellationTokenSource();
+
+        _ = PollAsync(_polling.Token);
+    }
+
+    private async Task PollAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PollIntervalMilliseconds));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await LoadSnapshotAsync();
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadSnapshotAsync()
+    {
+        try
+        {
+            var url = $"api/stream/snapshot?search={Uri.EscapeDataString(State.SearchText)}";
+
+            _snapshot = await Http.GetFromJsonAsync<StreamSnapshot>(url, ApiJsonOptions.Default);
+            _loadFailed = false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _loadFailed = true;
+        }
+    }
+
+    private async Task SendAsync(string macAddress, bool open)
+    {
+        var request = new PumpCommandRequest { MacAddress = macAddress, Open = open };
+
+        await PostCommandAsync(() => Http.PostAsJsonAsync("api/commands", request, ApiJsonOptions.Default));
+    }
+
+    private async Task UndoAsync()
+    {
+        await PostCommandAsync(() => Http.PostAsync("api/commands/undo", null));
+    }
+
+    private async Task PostCommandAsync(Func<Task<HttpResponseMessage>> post)
+    {
+        _isSending = true;
+        _commandFailed = false;
+
+        try
+        {
+            var response = await post();
+
+            _commandMessage = await response.Content.ReadAsStringAsync();
+            _commandFailed = !response.IsSuccessStatusCode;
+
+            await LoadSnapshotAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _commandMessage = "Could not reach the gateway API.";
+            _commandFailed = true;
+        }
+        finally
+        {
+            _isSending = false;
+        }
+    }
+
+    // The box changes the text, so the list is asked for again straight away.
+    private async void OnStateChanged()
+    {
+        await LoadSnapshotAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
-        State.OnChange -= StateHasChanged;
+        State.OnChange -= OnStateChanged;
+        _polling?.Cancel();
+        _polling?.Dispose();
     }
 }
