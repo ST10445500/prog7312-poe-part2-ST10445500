@@ -1,5 +1,6 @@
 using SmartX.Api.Collections;
 using SmartX.Api.Models.Stream;
+using SmartX.Shared.Models;
 
 //ST10445500 - PROG7312 - SmartX POE
 //StreamProcessor
@@ -21,9 +22,11 @@ namespace SmartX.Api.Services
         private readonly SensorStore _sensors;
         private readonly AlertQueue<StreamAlert> _alerts;
         private readonly StreamStats _stats;
+        private readonly HistoryLog<HistoryPoint> _history;
 
-        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats)
+        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history)
         {
+            _history = history;
             _queue = queue;
             _cache = cache;
             _sensors = sensors;
@@ -63,6 +66,17 @@ namespace SmartX.Api.Services
         {
             var name = _sensors.Find(packet.MacAddress)?.Location.NodeId ?? packet.MacAddress;
             _cache.Update(packet, name);
+
+            // The cache has just built the reading text with its unit, so the log reuses it.
+            var state = _cache.Find(packet.MacAddress);
+
+            _history.Add(packet.MacAddress.ToUpperInvariant(), packet.RecordedAt, new HistoryPoint
+            {
+                RecordedAt = packet.RecordedAt,
+                Reading = state?.Reading ?? string.Empty,
+                State = packet.State,
+                Rssi = packet.Radio.Rssi
+            });
         }
     }
 }

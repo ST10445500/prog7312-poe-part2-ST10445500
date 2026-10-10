@@ -279,3 +279,12 @@ Content-Type: application/json
 
 ### undo the newest override, a second undo with nothing left should 409
 POST {{SmartX.Api_HostAddress}}/api/commands/undo
+
+### what a device reported, oldest first, add from and to as ISO times to narrow it
+GET {{SmartX.Api_HostAddress}}/api/stream/devices/AA:BB:CC:DD:EE:01/history
+
+### a device the stream has not heard from should 404
+GET {{SmartX.Api_HostAddress}}/api/stream/devices/00:00:00:00:00:00/history
+
+### a start after the end should 400
+GET {{SmartX.Api_HostAddress}}/api/stream/devices/AA:BB:CC:DD:EE:01/history?from=2030-01-02T00:00:00Z&to=2030-01-01T00:00:00Z

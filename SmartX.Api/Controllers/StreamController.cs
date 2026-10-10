@@ -24,9 +24,11 @@ namespace SmartX.Api.Controllers
 
         private readonly AlertQueue<StreamAlert> _alerts;
         private readonly StreamStats _stats;
+        private readonly HistoryLog<HistoryPoint> _log;
 
-        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, AlertQueue<StreamAlert> alerts, StreamStats stats)
+        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> log)
         {
+            _log = log;
             _cache = cache;
             _queue = queue;
             _history = history;
@@ -59,6 +61,28 @@ namespace SmartX.Api.Controllers
                 Devices = Filter(search),
                 TakenAt = DateTime.UtcNow
             };
+        }
+
+        //..............................................................................//
+
+        //retrieves what a device reported between two moments, oldest first, or everything kept if no range is given
+        [HttpGet("devices/{macAddress}/history")]
+        public ActionResult<List<HistoryPoint>> GetHistory(string macAddress, DateTime? from = null, DateTime? to = null)
+        {
+            if (_cache.Find(macAddress) == null)
+            {
+                return NotFound($"The stream has not heard from {macAddress}.");
+            }
+
+            var start = from ?? DateTime.MinValue;
+            var end = to ?? DateTime.MaxValue;
+
+            if (start > end)
+            {
+                return BadRequest("The start of the range cannot be after the end.");
+            }
+
+            return _log.GetRange(macAddress.ToUpperInvariant(), start, end);
         }
 
         //..............................................................................//

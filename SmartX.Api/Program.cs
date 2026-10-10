@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using SmartX.Api.Collections;
 using SmartX.Api.Models.Stream;
 using SmartX.Api.Services;
+using SmartX.Shared.Models;
 
 //ST10445500 - PROG7312 - SmartX POE
 //Program
@@ -22,6 +23,7 @@ builder.Services.AddSingleton<AttachmentStore>();
 builder.Services.AddSingleton<AttachmentEncryption>();
 builder.Services.AddSingleton<PacketQueue<StreamPacket>>();
 builder.Services.AddSingleton<AlertQueue<StreamAlert>>();
+builder.Services.AddSingleton(new HistoryLog<HistoryPoint>(500));
 builder.Services.AddSingleton<AlertRules>();
 builder.Services.AddSingleton<StreamStats>();
 builder.Services.AddSingleton<DeviceCache>();
