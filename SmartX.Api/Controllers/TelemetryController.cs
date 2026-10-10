@@ -33,13 +33,17 @@ namespace SmartX.Api.Controllers
         private readonly TelemetryStore _telemetry;
         private readonly TelemetryHealth _health;
         private readonly PacketQueue<StreamPacket> _stream;
+        private readonly AlertQueue<StreamAlert> _alerts;
+        private readonly AlertRules _rules;
 
-        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health, PacketQueue<StreamPacket> stream)
+        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health, PacketQueue<StreamPacket> stream, AlertQueue<StreamAlert> alerts, AlertRules rules)
         {
             _sensors = sensors;
             _telemetry = telemetry;
             _health = health;
             _stream = stream;
+            _alerts = alerts;
+            _rules = rules;
         }
 
         //..............................................................................//
@@ -217,7 +221,7 @@ namespace SmartX.Api.Controllers
                 return;
             }
 
-            _stream.Enqueue(new StreamPacket
+            var packet = new StreamPacket
             {
                 MacAddress = sensor.MacAddress,
                 Category = sensor.Category,
@@ -232,7 +236,19 @@ namespace SmartX.Api.Controllers
                     PacketLoss = reading.PacketLoss,
                     Protocol = reading.Protocol
                 }
-            });
+            };
+
+            // Judged here, not in the processor, or an alert would already be stuck behind the backlog.
+            // An alert goes on the alert queue only, so the packet is never processed twice.
+            var alert = _rules.Evaluate(packet);
+
+            if (alert != null)
+            {
+                _alerts.Enqueue(alert, alert.Severity);
+                return;
+            }
+
+            _stream.Enqueue(packet);
         }
 
         //..............................................................................//

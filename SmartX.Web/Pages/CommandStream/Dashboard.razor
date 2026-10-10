@@ -33,6 +33,15 @@ else if (_snapshot != null)
             <StatTile Label="Queue depth" Value="@_snapshot.QueueDepth.ToString()" Note="packets waiting" />
         </div>
         <div class="col-6 col-md-3">
+            <StatTile Label="Alert queue" Value="@_snapshot.AlertDepth.ToString()" Note="alerts waiting" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Alerts raised" Value="@_snapshot.AlertsRaised.ToString()" Note="since the api started" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Packets jumped" Value="@_snapshot.PacketsJumped.ToString()" Note="overtaken by alerts" />
+        </div>
+        <div class="col-6 col-md-3">
             <StatTile Label="Devices" Value="@_snapshot.Devices.Count.ToString()" Note="seen on the stream" />
         </div>
         <div class="col-6 col-md-3">

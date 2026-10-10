@@ -19,12 +19,16 @@ namespace SmartX.Api.Services
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly DeviceCache _cache;
         private readonly SensorStore _sensors;
+        private readonly AlertQueue<StreamAlert> _alerts;
+        private readonly StreamStats _stats;
 
-        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors)
+        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats)
         {
             _queue = queue;
             _cache = cache;
             _sensors = sensors;
+            _alerts = alerts;
+            _stats = stats;
         }
 
         //..............................................................................//
@@ -34,15 +38,31 @@ namespace SmartX.Api.Services
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                // Alerts go first, whatever is waiting on the ordinary queue.
+                if (_alerts.TryDequeue(out var alert) && alert != null)
+                {
+                    _stats.RecordAlert(_queue.Count);
+                    Process(alert.Packet);
+                    continue;
+                }
+
                 if (_queue.TryDequeue(out var packet) && packet != null)
                 {
-                    var name = _sensors.Find(packet.MacAddress)?.Location.NodeId ?? packet.MacAddress;
-                    _cache.Update(packet, name);
+                    Process(packet);
                     continue;
                 }
 
                 await Task.Delay(IdleMilliseconds, stoppingToken);
             }
+        }
+
+        //..............................................................................//
+
+        //puts one packet into the device cache under the name the device was given
+        private void Process(StreamPacket packet)
+        {
+            var name = _sensors.Find(packet.MacAddress)?.Location.NodeId ?? packet.MacAddress;
+            _cache.Update(packet, name);
         }
     }
 }

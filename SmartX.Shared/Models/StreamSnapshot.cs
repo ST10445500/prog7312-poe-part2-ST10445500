@@ -13,6 +13,15 @@ namespace SmartX.Shared.Models
         //how many packets are waiting to be processed
         public int QueueDepth { get; set; }
 
+        //how many alerts are waiting to be processed
+        public int AlertDepth { get; set; }
+
+        //how many alerts have been processed since the api started
+        public long AlertsRaised { get; set; }
+
+        //how many ordinary packets were still waiting when those alerts were processed
+        public long PacketsJumped { get; set; }
+
         //how many overrides can still be undone
         public int UndoDepth { get; set; }
 

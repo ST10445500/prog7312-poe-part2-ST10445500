@@ -22,11 +22,16 @@ namespace SmartX.Api.Controllers
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly CommandHistory<PumpCommand> _history;
 
-        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history)
+        private readonly AlertQueue<StreamAlert> _alerts;
+        private readonly StreamStats _stats;
+
+        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, AlertQueue<StreamAlert> alerts, StreamStats stats)
         {
             _cache = cache;
             _queue = queue;
             _history = history;
+            _alerts = alerts;
+            _stats = stats;
         }
 
         //..............................................................................//
@@ -47,6 +52,9 @@ namespace SmartX.Api.Controllers
             return new StreamSnapshot
             {
                 QueueDepth = _queue.Count,
+                AlertDepth = _alerts.Count,
+                AlertsRaised = _stats.AlertsRaised,
+                PacketsJumped = _stats.PacketsJumped,
                 UndoDepth = _history.Count,
                 Devices = Filter(search),
                 TakenAt = DateTime.UtcNow
