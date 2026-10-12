@@ -159,6 +159,54 @@ namespace SmartX.Tests
             Assert.NotNull(alert);
             Assert.Equal("LowMoisture", alert.Rule);
         }
+
+        [Fact]
+        public void Evaluate_ValveReportsFault_RaisesCriticalNamedAfterTheCode()
+        {
+            // Arrange
+            var rules = new AlertRules();
+            var packet = Packet(SensorCategory.Actuator, null);
+            packet.Fault = "StuckValve";
+
+            // Act
+            var alert = rules.Evaluate(packet);
+
+            // Assert
+            Assert.NotNull(alert);
+            Assert.Equal("StuckValve", alert.Rule);
+            Assert.Equal(StreamAlert.Critical, alert.Severity);
+        }
+
+        [Fact]
+        public void Evaluate_FaultAndWeakSignal_FaultWins()
+        {
+            // Arrange
+            var rules = new AlertRules();
+            var packet = Packet(SensorCategory.Actuator, null, -95);
+            packet.Fault = "StuckValve";
+
+            // Act
+            var alert = rules.Evaluate(packet);
+
+            // Assert
+            Assert.NotNull(alert);
+            Assert.Equal("StuckValve", alert.Rule);
+        }
+
+        [Fact]
+        public void Evaluate_BlankFault_IsIgnored()
+        {
+            // Arrange
+            var rules = new AlertRules();
+            var packet = Packet(SensorCategory.Actuator, null);
+            packet.Fault = "   ";
+
+            // Act
+            var alert = rules.Evaluate(packet);
+
+            // Assert
+            Assert.Null(alert);
+        }
     }
 }
 

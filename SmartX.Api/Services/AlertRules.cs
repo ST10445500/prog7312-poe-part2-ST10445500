@@ -28,7 +28,13 @@ namespace SmartX.Api.Services
         //retrieves the alert a reading raises, or null if it breaks no rule
         public StreamAlert? Evaluate(StreamPacket packet)
         {
-            // Moisture and power come first because they put crops and equipment at risk.
+            // A fault the device reports itself comes first, the code is the rule so it can be tracked per device.
+            if (!string.IsNullOrWhiteSpace(packet.Fault))
+            {
+                return Build(packet, packet.Fault.Trim(), StreamAlert.Critical, $"Device reported fault {packet.Fault.Trim()}.");
+            }
+
+            // Moisture and power come next because they put crops and equipment at risk.
             if (packet.Category == SensorCategory.Environmental && packet.Value < LowMoisturePercent)
             {
                 return Build(packet, "LowMoisture", StreamAlert.Critical, $"Soil moisture is down to {packet.Value:0.#}%.");

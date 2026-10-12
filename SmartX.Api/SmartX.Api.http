@@ -288,3 +288,9 @@ GET {{SmartX.Api_HostAddress}}/api/stream/devices/00:00:00:00:00:00/history
 
 ### a start after the end should 400
 GET {{SmartX.Api_HostAddress}}/api/stream/devices/AA:BB:CC:DD:EE:01/history?from=2030-01-02T00:00:00Z&to=2030-01-01T00:00:00Z
+
+### a valve reporting its own fault, raises a critical alert named after the code
+POST {{SmartX.Api_HostAddress}}/api/telemetry
+Content-Type: application/json
+
+{ "macAddress": "AA:BB:CC:DD:EE:02", "state": false, "fault": "StuckValve" }

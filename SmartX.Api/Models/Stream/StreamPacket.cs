@@ -29,6 +29,9 @@ namespace SmartX.Api.Models.Stream
 
         //what the radio link said about itself
         public RadioStats Radio { get; set; } = new();
+
+        //a fault code the device reported about itself, or null if it reported none
+        public string? Fault { get; set; }
     }
 }
 

@@ -37,6 +37,9 @@ namespace SmartX.Api.Models.Telemetry
 
         //the radio protocol in use, such as ESP-NOW, Zigbee or Thread
         public string? Protocol { get; set; }
+
+        //a fault code the device is reporting about itself, such as StuckValve, or null if it has none
+        public string? Fault { get; set; }
     }
 
     //..............................................................................//
