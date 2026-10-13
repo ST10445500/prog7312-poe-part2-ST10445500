@@ -29,6 +29,9 @@ namespace SmartX.Simulator
         public double? DutyCycle { get; set; }
         public double? PacketLoss { get; set; }
         public string? Protocol { get; set; }
+
+        //a fault code the device reports about itself, such as StuckValve
+        public string? Fault { get; set; }
     }
 }
 

@@ -24,6 +24,7 @@ builder.Services.AddSingleton<AttachmentEncryption>();
 builder.Services.AddSingleton<PacketQueue<StreamPacket>>();
 builder.Services.AddSingleton<AlertQueue<StreamAlert>>();
 builder.Services.AddSingleton(new HistoryLog<HistoryPoint>(500));
+builder.Services.AddSingleton<ActiveFaults>();
 builder.Services.AddSingleton<AlertRules>();
 builder.Services.AddSingleton<StreamStats>();
 builder.Services.AddSingleton<DeviceCache>();

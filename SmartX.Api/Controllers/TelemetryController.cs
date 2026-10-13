@@ -35,9 +35,11 @@ namespace SmartX.Api.Controllers
         private readonly PacketQueue<StreamPacket> _stream;
         private readonly AlertQueue<StreamAlert> _alerts;
         private readonly AlertRules _rules;
+        private readonly ActiveFaults _faults;
 
-        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health, PacketQueue<StreamPacket> stream, AlertQueue<StreamAlert> alerts, AlertRules rules)
+        public TelemetryController(SensorStore sensors, TelemetryStore telemetry, TelemetryHealth health, PacketQueue<StreamPacket> stream, AlertQueue<StreamAlert> alerts, AlertRules rules, ActiveFaults faults)
         {
+            _faults = faults;
             _sensors = sensors;
             _telemetry = telemetry;
             _health = health;
@@ -243,7 +245,9 @@ namespace SmartX.Api.Controllers
             // An alert goes on the alert queue only, so the packet is never processed twice.
             var alert = _rules.Evaluate(packet);
 
-            if (alert != null)
+            // Anything else this device had active has stopped, so it can be raised again if it comes back.
+            // A fault that is already active is not alerted again, the reading still goes the ordinary way.
+            if (_faults.Report(packet.MacAddress, alert?.Rule) && alert != null)
             {
                 _alerts.Enqueue(alert, alert.Severity);
                 return;

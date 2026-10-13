@@ -42,12 +42,26 @@ else if (_snapshot != null)
             <StatTile Label="Packets jumped" Value="@_snapshot.PacketsJumped.ToString()" Note="overtaken by alerts" />
         </div>
         <div class="col-6 col-md-3">
+            <StatTile Label="Active faults" Value="@_snapshot.ActiveErrors.ToString()" Note="reported and not cleared" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Suppressed" Value="@_snapshot.SuppressedDuplicates.ToString()" Note="repeat faults not alerted" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Disconnected" Value="@_snapshot.DisconnectedNodes.Count.ToString()" Note="gone quiet" />
+        </div>
+        <div class="col-6 col-md-3">
             <StatTile Label="Devices" Value="@_snapshot.Devices.Count.ToString()" Note="seen on the stream" />
         </div>
         <div class="col-6 col-md-3">
             <StatTile Label="Undo stack" Value="@_snapshot.UndoDepth.ToString()" Note="overrides that can be undone" />
         </div>
     </div>
+
+    @if (_snapshot.DisconnectedNodes.Count > 0)
+    {
+        <div class="alert alert-warning">No packets from @string.Join(", ", _snapshot.DisconnectedNodes).</div>
+    }
 
     @if (_commandMessage != null)
     {

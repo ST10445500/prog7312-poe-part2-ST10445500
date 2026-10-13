@@ -194,6 +194,56 @@ namespace SmartX.Tests
         }
 
         [Fact]
+        public void FindSilent_EmptyList_ReturnsNothing()
+        {
+            // Arrange
+            var rules = new AlertRules();
+
+            // Act
+            var silent = rules.FindSilent(new List<DeviceState>(), DateTime.UtcNow);
+
+            // Assert
+            Assert.Empty(silent);
+        }
+
+        [Fact]
+        public void FindSilent_JustInsideTheLimit_IsNotSilent()
+        {
+            // Arrange
+            var rules = new AlertRules();
+            var now = DateTime.UtcNow;
+            var devices = new List<DeviceState>
+            {
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(AlertRules.SilentSeconds - 1)) }
+            };
+
+            // Act
+            var silent = rules.FindSilent(devices, now);
+
+            // Assert
+            Assert.Empty(silent);
+        }
+
+        [Fact]
+        public void FindSilent_PastTheLimit_ReturnsOnlyThatDevice()
+        {
+            // Arrange
+            var rules = new AlertRules();
+            var now = DateTime.UtcNow;
+            var devices = new List<DeviceState>
+            {
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(AlertRules.SilentSeconds + 1)) },
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:02", LastSeen = now.AddSeconds(-2) }
+            };
+
+            // Act
+            var silent = rules.FindSilent(devices, now);
+
+            // Assert
+            Assert.Equal(new[] { "AA:BB:CC:DD:EE:01" }, silent);
+        }
+
+        [Fact]
         public void Evaluate_BlankFault_IsIgnored()
         {
             // Arrange

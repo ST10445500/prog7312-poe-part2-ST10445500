@@ -24,7 +24,17 @@ const int BackfillIntervalSeconds = 3;
 const double MinIntervalSeconds = 1;
 const double MaxIntervalSeconds = 2;
 
-var baseUrl = args.Length > 0 ? args[0] : DefaultBaseUrl;
+// --drop goes quiet for a while after a short spell, so a silent node and its return can be shown.
+const double DropAfterSeconds = 10;
+const double DropForSeconds = 40;
+
+// What a valve says when --fault is used.
+const string FaultCode = "StuckValve";
+
+var baseUrl = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal) ? args[0] : DefaultBaseUrl;
+var faultMac = ReadFlag("--fault");
+var dropMac = ReadFlag("--drop");
+var startedAt = DateTime.UtcNow;
 var gateway = new GatewayClient(baseUrl);
 
 Console.WriteLine($"Smart-X simulator, talking to {baseUrl}");
@@ -116,6 +126,9 @@ Console.CancelKeyPress += (_, pressed) =>
 
 Console.WriteLine($"Streaming live readings every {MinIntervalSeconds} to {MaxIntervalSeconds} seconds. Ctrl-C to stop.");
 
+// The backfill takes a while, so the quiet spell is timed from here and not from launch.
+startedAt = DateTime.UtcNow;
+
 // A task each, so readings really do land at once and the locks get exercised.
 var streams = reporting
 	.Select(sensor => StreamSensorAsync(sensor, stopping.Token))
@@ -124,6 +137,27 @@ var streams = reporting
 await Task.WhenAll(streams);
 
 Console.WriteLine("Simulator stopped.");
+
+//..............................................................................//
+
+//retrieves the text after a flag such as --fault, or null if the flag was not given
+string? ReadFlag(string flag)
+{
+	var position = Array.IndexOf(args, flag);
+	return position >= 0 && position + 1 < args.Length ? args[position + 1] : null;
+}
+
+//checks whether this sensor is inside its quiet spell
+bool IsDropped(string macAddress)
+{
+	if (!string.Equals(macAddress, dropMac, StringComparison.OrdinalIgnoreCase))
+	{
+		return false;
+	}
+
+	var running = (DateTime.UtcNow - startedAt).TotalSeconds;
+	return running >= DropAfterSeconds && running < DropAfterSeconds + DropForSeconds;
+}
 
 //..............................................................................//
 
@@ -141,7 +175,20 @@ async Task StreamSensorAsync(SensorRegistration sensor, CancellationToken token)
 		try
 		{
 			await Task.Delay(TimeSpan.FromSeconds(seconds), token);
-			await gateway.PostReadingAsync(generator.Next(sensor.MacAddress, DateTime.UtcNow), token);
+
+			if (IsDropped(sensor.MacAddress))
+			{
+				continue;
+			}
+
+			var reading = generator.Next(sensor.MacAddress, DateTime.UtcNow);
+
+			if (string.Equals(sensor.MacAddress, faultMac, StringComparison.OrdinalIgnoreCase))
+			{
+				reading.Fault = FaultCode;
+			}
+
+			await gateway.PostReadingAsync(reading, token);
 		}
 		catch (OperationCanceledException)
 		{

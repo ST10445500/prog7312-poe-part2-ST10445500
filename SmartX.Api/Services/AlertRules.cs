@@ -23,6 +23,9 @@ namespace SmartX.Api.Services
         //a signal weaker than this many dBm is close to dropping off the mesh
         public const int WeakRssi = -90;
 
+        //a device that has not reported for this many seconds is counted as gone quiet
+        public const int SilentSeconds = 15;
+
         //..............................................................................//
 
         //retrieves the alert a reading raises, or null if it breaks no rule
@@ -51,6 +54,17 @@ namespace SmartX.Api.Services
             }
 
             return null;
+        }
+
+        //..............................................................................//
+
+        //retrieves the macs of the devices that have not reported for longer than the silent limit
+        public List<string> FindSilent(IEnumerable<DeviceState> devices, DateTime now)
+        {
+            return devices
+                .Where(device => now - device.LastSeen > TimeSpan.FromSeconds(SilentSeconds))
+                .Select(device => device.MacAddress)
+                .ToList();
         }
 
         //..............................................................................//

@@ -25,9 +25,11 @@ namespace SmartX.Api.Controllers
         private readonly AlertQueue<StreamAlert> _alerts;
         private readonly StreamStats _stats;
         private readonly HistoryLog<HistoryPoint> _log;
+        private readonly ActiveFaults _faults;
 
-        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> log)
+        public StreamController(DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> log, ActiveFaults faults)
         {
+            _faults = faults;
             _log = log;
             _cache = cache;
             _queue = queue;
@@ -57,6 +59,9 @@ namespace SmartX.Api.Controllers
                 AlertDepth = _alerts.Count,
                 AlertsRaised = _stats.AlertsRaised,
                 PacketsJumped = _stats.PacketsJumped,
+                ActiveErrors = _faults.ActiveErrorCount,
+                SuppressedDuplicates = _faults.SuppressedCount,
+                DisconnectedNodes = _faults.GetDisconnected(),
                 UndoDepth = _history.Count,
                 Devices = Filter(search),
                 TakenAt = DateTime.UtcNow

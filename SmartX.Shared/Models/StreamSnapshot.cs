@@ -22,6 +22,15 @@ namespace SmartX.Shared.Models
         //how many ordinary packets were still waiting when those alerts were processed
         public long PacketsJumped { get; set; }
 
+        //how many faults are active right now
+        public int ActiveErrors { get; set; }
+
+        //how many repeats of an active fault were turned away instead of alerted
+        public long SuppressedDuplicates { get; set; }
+
+        //the devices that have gone quiet
+        public List<string> DisconnectedNodes { get; set; } = new();
+
         //how many overrides can still be undone
         public int UndoDepth { get; set; }
 
