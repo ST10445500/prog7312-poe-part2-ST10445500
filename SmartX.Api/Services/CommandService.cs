@@ -39,16 +39,18 @@ namespace SmartX.Api.Services
 
             _history.Push(new PumpCommand
             {
-                MacAddress = macAddress,
-                Open = open,
-                PreviousOpen = previous,
-                SentAt = DateTime.UtcNow
+                Label = open ? "Open" : "Close",
+                SentAt = DateTime.UtcNow,
+                Changes = new List<ValveChange>
+                {
+                    new ValveChange { MacAddress = macAddress, Open = open, PreviousOpen = previous }
+                }
             });
         }
 
         //..............................................................................//
 
-        //puts back the state the newest override replaced, returning false if there is nothing to undo
+        //puts back every state the newest override replaced, returning false if there is nothing to undo
         public bool TryUndo(out PumpCommand? undone)
         {
             if (!_history.TryPop(out undone) || undone == null)
@@ -56,7 +58,11 @@ namespace SmartX.Api.Services
                 return false;
             }
 
-            Apply(undone.MacAddress, undone.PreviousOpen);
+            foreach (var change in undone.Changes)
+            {
+                Apply(change.MacAddress, change.PreviousOpen);
+            }
+
             return true;
         }
 

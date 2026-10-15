@@ -59,7 +59,13 @@ namespace SmartX.Api.Controllers
                 return Conflict("There is nothing to undo.");
             }
 
-            return Ok($"{undone.MacAddress} put back to {(undone.PreviousOpen ? "open" : "closed")}.");
+            if (undone.Changes.Count == 1)
+            {
+                var change = undone.Changes[0];
+                return Ok($"{change.MacAddress} put back to {(change.PreviousOpen ? "open" : "closed")}.");
+            }
+
+            return Ok($"Put back {undone.Changes.Count} devices.");
         }
     }
 }
