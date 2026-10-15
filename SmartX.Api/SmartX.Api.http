@@ -297,3 +297,9 @@ Content-Type: application/json
 
 ### close every open valve as one override, one undo puts them all back
 POST {{SmartX.Api_HostAddress}}/api/commands/close-all
+
+### only the pumps and valves the stream has heard from
+GET {{SmartX.Api_HostAddress}}/api/stream/devices?category=Actuator
+
+### only devices with an active fault or gone quiet, narrowed again by mac text
+GET {{SmartX.Api_HostAddress}}/api/stream/devices?alertsOnly=true&category=Actuator&search=02

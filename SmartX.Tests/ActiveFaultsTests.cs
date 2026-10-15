@@ -239,6 +239,40 @@ namespace SmartX.Tests
         }
 
         [Fact]
+        public void GetErrors_EmptySet_ReturnsEmptyList()
+        {
+            // Arrange
+            var faults = new ActiveFaults();
+
+            // Act
+            var list = faults.GetErrors();
+
+            // Assert
+            Assert.Empty(list);
+        }
+
+        [Fact]
+        public void GetErrors_SeveralFaults_ReturnsSortedAndChangingTheListLeavesTheSet()
+        {
+            // Arrange
+            var faults = new ActiveFaults();
+            faults.TryRaise(MacB, "E01");
+            faults.TryRaise(MacA, "E02");
+            faults.TryRaise(MacA, "E01");
+
+            // Act
+            var list = faults.GetErrors();
+            var expected = new[] { (MacA, "E01"), (MacA, "E02"), (MacB, "E01") };
+            var sorted = list.ToArray();
+            list.Clear();
+
+            // Assert
+            Assert.Equal(expected, sorted);
+            Assert.Equal(3, faults.GetErrors().Count);
+            Assert.Equal(3, faults.ActiveErrorCount);
+        }
+
+        [Fact]
         public void TryRaise_ManyThreadsSameKey_OnlyOneReturnsTrue()
         {
             // Arrange

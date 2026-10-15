@@ -28,6 +28,12 @@ namespace SmartX.Shared.Models
         public DateTime LastSeen { get; set; }
 
         public RadioStats Radio { get; set; } = new();
+
+        //the fault codes active on the device right now, empty if it has none
+        public List<string> Faults { get; set; } = new();
+
+        //whether the device has gone quiet
+        public bool Disconnected { get; set; }
     }
 }
 

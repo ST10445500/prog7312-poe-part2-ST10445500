@@ -40,18 +40,18 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
-        //retrieves the devices the stream has seen, narrowed to mac addresses containing the search text
+        //retrieves the devices the stream has seen, narrowed by search text, category and whether they have a fault
         [HttpGet("devices")]
-        public ActionResult<List<DeviceState>> GetDevices(string? search = null)
+        public ActionResult<List<DeviceState>> GetDevices(string? search = null, SensorCategory? category = null, bool alertsOnly = false)
         {
-            return Filter(search);
+            return Filter(search, category, alertsOnly);
         }
 
         //..............................................................................//
 
         //retrieves the queue depth and the devices together, so the page polls once
         [HttpGet("snapshot")]
-        public ActionResult<StreamSnapshot> GetSnapshot(string? search = null)
+        public ActionResult<StreamSnapshot> GetSnapshot(string? search = null, SensorCategory? category = null, bool alertsOnly = false)
         {
             return new StreamSnapshot
             {
@@ -63,7 +63,7 @@ namespace SmartX.Api.Controllers
                 SuppressedDuplicates = _faults.SuppressedCount,
                 DisconnectedNodes = _faults.GetDisconnected(),
                 UndoDepth = _history.Count,
-                Devices = Filter(search),
+                Devices = Filter(search, category, alertsOnly),
                 TakenAt = DateTime.UtcNow
             };
         }
@@ -92,18 +92,60 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
-        //narrows the cache to the devices whose mac address contains the text
-        private List<DeviceState> Filter(string? search)
+        //narrows the cache to the devices that match the search text, the category and the alert switch together
+        private List<DeviceState> Filter(string? search, SensorCategory? category, bool alertsOnly)
         {
-            var devices = _cache.GetAll();
+            var devices = Describe(_cache.GetAll());
 
-            if (string.IsNullOrWhiteSpace(search))
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                return devices;
+                devices = devices
+                    .Where(device => device.MacAddress.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
 
+            if (category != null)
+            {
+                devices = devices
+                    .Where(device => device.Category == category)
+                    .ToList();
+            }
+
+            if (alertsOnly)
+            {
+                devices = devices
+                    .Where(device => device.Faults.Count > 0 || device.Disconnected)
+                    .ToList();
+            }
+
+            return devices;
+        }
+
+        //..............................................................................//
+
+        //copies each device with its active faults and whether it has gone quiet
+        private List<DeviceState> Describe(List<DeviceState> devices)
+        {
+            var faults = _faults.GetErrors();
+            var quiet = _faults.GetDisconnected().ToHashSet();
+
+            // The cache hands out the objects it stores, so these are copies and the cache is left alone.
             return devices
-                .Where(device => device.MacAddress.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+                .Select(device => new DeviceState
+                {
+                    MacAddress = device.MacAddress,
+                    Name = device.Name,
+                    Category = device.Category,
+                    Reading = device.Reading,
+                    State = device.State,
+                    LastSeen = device.LastSeen,
+                    Radio = device.Radio,
+                    Faults = faults
+                        .Where(fault => fault.Mac == device.MacAddress)
+                        .Select(fault => fault.Code)
+                        .ToList(),
+                    Disconnected = quiet.Contains(device.MacAddress)
+                })
                 .ToList();
         }
     }

@@ -130,6 +130,20 @@ namespace SmartX.Api.Collections
 
         //..............................................................................//
 
+        //retrieves a sorted copy of every active fault, so callers never walk the set while it changes
+        public List<(string Mac, string Code)> GetErrors()
+        {
+            lock (_lock)
+            {
+                return _errors
+                    .OrderBy(error => error.Mac, StringComparer.Ordinal)
+                    .ThenBy(error => error.Code, StringComparer.Ordinal)
+                    .ToList();
+            }
+        }
+
+        //..............................................................................//
+
         //retrieves a sorted copy of the devices that have gone quiet
         public List<string> GetDisconnected()
         {
