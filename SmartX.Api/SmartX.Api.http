@@ -294,3 +294,6 @@ POST {{SmartX.Api_HostAddress}}/api/telemetry
 Content-Type: application/json
 
 { "macAddress": "AA:BB:CC:DD:EE:02", "state": false, "fault": "StuckValve" }
+
+### close every open valve as one override, one undo puts them all back
+POST {{SmartX.Api_HostAddress}}/api/commands/close-all

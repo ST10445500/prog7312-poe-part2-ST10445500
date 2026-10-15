@@ -18,13 +18,33 @@ namespace SmartX.Tests
         private const string MacA = "AA:BB:CC:DD:EE:01";
         private const string MacB = "AA:BB:CC:DD:EE:02";
 
+        private const string MacC = "AA:BB:CC:DD:EE:03";
+        private const string MacMoisture = "AA:BB:CC:DD:EE:04";
+
         private static (CommandService Service, DeviceCache Cache, PacketQueue<StreamPacket> Queue, CommandHistory<PumpCommand> History) Build()
+        {
+            var (service, cache, queue, history, _) = BuildWithSensors();
+            return (service, cache, queue, history);
+        }
+
+        private static (CommandService Service, DeviceCache Cache, PacketQueue<StreamPacket> Queue, CommandHistory<PumpCommand> History, SensorStore Sensors) BuildWithSensors()
         {
             var cache = new DeviceCache();
             var queue = new PacketQueue<StreamPacket>();
             var history = new CommandHistory<PumpCommand>();
-            var service = new CommandService(new TelemetryStore(), cache, queue, history);
-            return (service, cache, queue, history);
+            var sensors = new SensorStore();
+            var service = new CommandService(new TelemetryStore(), cache, queue, history, sensors);
+            return (service, cache, queue, history, sensors);
+        }
+
+        private static void Register(SensorStore sensors, string mac, SensorCategory category)
+        {
+            sensors.TryRegister(new SensorRegistration
+            {
+                MacAddress = mac,
+                Category = category,
+                Location = new DeploymentLocation { Zone = "Zone A", Room = "Room 1", NodeId = "Node " + mac }
+            });
         }
 
         private static void SeedValve(DeviceCache cache, string mac, bool open)
@@ -162,6 +182,139 @@ namespace SmartX.Tests
             // Assert
             Assert.False(again);
             Assert.Null(command);
+        }
+
+        [Fact]
+        public void ShutAll_TwoOpenAndOneClosed_ReturnsTwoAndPushesOneGroup()
+        {
+            // Arrange
+            var (service, cache, queue, history, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            Register(sensors, MacB, SensorCategory.Actuator);
+            Register(sensors, MacC, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            SeedValve(cache, MacB, true);
+            SeedValve(cache, MacC, false);
+
+            // Act
+            var closed = service.ShutAll();
+            var packets = Drain(queue);
+
+            // Assert
+            Assert.Equal(2, closed);
+            Assert.Equal(1, history.Count);
+            Assert.Equal(2, packets.Count);
+            Assert.All(packets, packet => Assert.False(packet.State));
+        }
+
+        [Fact]
+        public void TryUndo_AfterShutAll_ReopensOnlyTheOnesThatWereOpen()
+        {
+            // Arrange
+            var (service, cache, queue, history, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            Register(sensors, MacB, SensorCategory.Actuator);
+            Register(sensors, MacC, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            SeedValve(cache, MacB, true);
+            SeedValve(cache, MacC, false);
+            service.ShutAll();
+            Drain(queue);
+
+            // Act
+            var undone = service.TryUndo(out var command);
+            var packets = Drain(queue);
+
+            // Assert
+            Assert.True(undone);
+            Assert.Equal(2, command!.Changes.Count);
+            Assert.Equal(2, packets.Count);
+            Assert.All(packets, packet => Assert.True(packet.State));
+            Assert.Contains(packets, packet => packet.MacAddress == MacA);
+            Assert.Contains(packets, packet => packet.MacAddress == MacB);
+            Assert.DoesNotContain(packets, packet => packet.MacAddress == MacC);
+            Assert.Equal(0, history.Count);
+        }
+
+        [Fact]
+        public void ShutAll_NothingOpen_ReturnsZeroAndPushesNothing()
+        {
+            // Arrange
+            var (service, cache, queue, history, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            SeedValve(cache, MacA, false);
+
+            // Act
+            var closed = service.ShutAll();
+            var packets = Drain(queue);
+
+            // Assert
+            Assert.Equal(0, closed);
+            Assert.Equal(0, history.Count);
+            Assert.Empty(packets);
+        }
+
+        [Fact]
+        public void ShutAll_ActuatorCacheNeverHeardFrom_IsSkipped()
+        {
+            // Arrange
+            var (service, _, queue, history, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+
+            // Act
+            var closed = service.ShutAll();
+            var packets = Drain(queue);
+
+            // Assert
+            Assert.Equal(0, closed);
+            Assert.Equal(0, history.Count);
+            Assert.Empty(packets);
+        }
+
+        [Fact]
+        public void ShutAll_MoistureSensorInCache_IsIgnored()
+        {
+            // Arrange
+            var (service, cache, queue, history, sensors) = BuildWithSensors();
+            Register(sensors, MacMoisture, SensorCategory.Environmental);
+            cache.Update(new StreamPacket
+            {
+                MacAddress = MacMoisture,
+                Category = SensorCategory.Environmental,
+                State = true,
+                RecordedAt = DateTime.UtcNow
+            }, "Moisture");
+
+            // Act
+            var closed = service.ShutAll();
+            var packets = Drain(queue);
+
+            // Assert
+            Assert.Equal(0, closed);
+            Assert.Equal(0, history.Count);
+            Assert.Empty(packets);
+        }
+
+        [Fact]
+        public void TryUndo_ShutAllThenSingleSend_UndoesOnlyTheSingleSend()
+        {
+            // Arrange
+            var (service, cache, _, history, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            Register(sensors, MacB, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            SeedValve(cache, MacB, true);
+            service.ShutAll();
+            service.Send(MacC, true);
+
+            // Act
+            var undone = service.TryUndo(out var command);
+
+            // Assert
+            Assert.True(undone);
+            var change = Assert.Single(command!.Changes);
+            Assert.Equal(MacC, change.MacAddress);
+            Assert.Equal(1, history.Count);
         }
     }
 }

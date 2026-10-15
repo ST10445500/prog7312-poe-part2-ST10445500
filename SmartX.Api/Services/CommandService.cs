@@ -18,9 +18,11 @@ namespace SmartX.Api.Services
         private readonly DeviceCache _cache;
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly CommandHistory<PumpCommand> _history;
+        private readonly SensorStore _sensors;
 
-        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history)
+        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, SensorStore sensors)
         {
+            _sensors = sensors;
             _telemetry = telemetry;
             _cache = cache;
             _queue = queue;
@@ -46,6 +48,46 @@ namespace SmartX.Api.Services
                     new ValveChange { MacAddress = macAddress, Open = open, PreviousOpen = previous }
                 }
             });
+        }
+
+        //..............................................................................//
+
+        //closes every pump and valve that is open as one override, returning how many were closed
+        public int ShutAll()
+        {
+            var changes = new List<ValveChange>();
+
+            foreach (var sensor in _sensors.GetAll())
+            {
+                if (sensor.Category != SensorCategory.Actuator)
+                {
+                    continue;
+                }
+
+                // Only an open one counts as changed, and one the stream never heard from is taken as closed.
+                if (_cache.Find(sensor.MacAddress)?.State != true)
+                {
+                    continue;
+                }
+
+                Apply(sensor.MacAddress, false);
+                changes.Add(new ValveChange { MacAddress = sensor.MacAddress, Open = false, PreviousOpen = true });
+            }
+
+            // Nothing was open, so there is nothing to undo and nothing goes on the stack.
+            if (changes.Count == 0)
+            {
+                return 0;
+            }
+
+            _history.Push(new PumpCommand
+            {
+                Label = "Shut all valves",
+                SentAt = DateTime.UtcNow,
+                Changes = changes
+            });
+
+            return changes.Count;
         }
 
         //..............................................................................//

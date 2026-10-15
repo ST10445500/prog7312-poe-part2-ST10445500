@@ -50,6 +50,22 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
+        //closes every pump and valve that is open, as one override that a single undo puts back
+        [HttpPost("close-all")]
+        public ActionResult ShutAll()
+        {
+            var closed = _commands.ShutAll();
+
+            if (closed == 0)
+            {
+                return Ok("No valves were open.");
+            }
+
+            return Ok($"{closed} {(closed == 1 ? "valve" : "valves")} closed.");
+        }
+
+        //..............................................................................//
+
         //puts back the state the newest override replaced
         [HttpPost("undo")]
         public ActionResult Undo()

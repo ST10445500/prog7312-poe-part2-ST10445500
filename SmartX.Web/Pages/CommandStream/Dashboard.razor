@@ -74,6 +74,11 @@ else if (_snapshot != null)
                     BusyLabel="Undoing..."
                     Busy="_isSending"
                     OnClick="UndoAsync" />
+        <BusyButton CssClass="btn btn-outline-danger btn-sm ms-2"
+                    Label="Shut all valves"
+                    BusyLabel="Closing..."
+                    Busy="_isSending"
+                    OnClick="ShutAllAsync" />
     </div>
 
     @if (_snapshot.Devices.Count == 0)
@@ -187,6 +192,11 @@ else if (_snapshot != null)
         var request = new PumpCommandRequest { MacAddress = macAddress, Open = open };
 
         await PostCommandAsync(() => Http.PostAsJsonAsync("api/commands", request, ApiJsonOptions.Default));
+    }
+
+    private async Task ShutAllAsync()
+    {
+        await PostCommandAsync(() => Http.PostAsync("api/commands/close-all", null));
     }
 
     private async Task UndoAsync()
