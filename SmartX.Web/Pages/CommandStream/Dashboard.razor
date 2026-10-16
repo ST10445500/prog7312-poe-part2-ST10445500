@@ -85,7 +85,14 @@ else if (_snapshot != null)
     {
         <div class="card">
             <div class="card-body text-center text-muted py-5">
-                No devices have reported yet. Start the simulator and they will show up here.
+                @if (string.IsNullOrWhiteSpace(State.SearchText))
+                {
+                    <span>No devices have reported yet. Start the simulator and they will show up here.</span>
+                }
+                else
+                {
+                    <span>No devices match "@State.SearchText".</span>
+                }
             </div>
         </div>
     }
