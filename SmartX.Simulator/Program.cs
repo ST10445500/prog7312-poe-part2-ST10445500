@@ -31,9 +31,15 @@ const double DropForSeconds = 40;
 // What a valve says when --fault is used.
 const string FaultCode = "StuckValve";
 
+// --critical waits a little, floods the gateway, then sends one dry reading from the named moisture sensor.
+const double CriticalAfterSeconds = 5;
+const int CriticalBurstReadings = 300;
+const double CriticalMoisture = 5;
+
 var baseUrl = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal) ? args[0] : DefaultBaseUrl;
 var faultMac = ReadFlag("--fault");
 var dropMac = ReadFlag("--drop");
+var criticalMac = ReadFlag("--critical");
 var startedAt = DateTime.UtcNow;
 var gateway = new GatewayClient(baseUrl);
 
@@ -134,6 +140,11 @@ var streams = reporting
 	.Select(sensor => StreamSensorAsync(sensor, stopping.Token))
 	.ToList();
 
+if (criticalMac != null)
+{
+	streams.Add(SendCriticalAsync(criticalMac, stopping.Token));
+}
+
 await Task.WhenAll(streams);
 
 Console.WriteLine("Simulator stopped.");
@@ -146,6 +157,60 @@ string? ReadFlag(string flag)
 	var position = Array.IndexOf(args, flag);
 	return position >= 0 && position + 1 < args.Length ? args[position + 1] : null;
 }
+
+//floods the gateway with ordinary readings and then sends one dry reading from the named sensor
+async Task SendCriticalAsync(string macAddress, CancellationToken token)
+{
+	var target = reporting.FirstOrDefault(sensor => string.Equals(sensor.MacAddress, macAddress, StringComparison.OrdinalIgnoreCase));
+
+	if (target == null || target.Category != SensorCategory.Environmental)
+	{
+		Console.WriteLine($"--critical needs a moisture sensor this simulator is reporting for, and {macAddress} is not one.");
+		return;
+	}
+
+	try
+	{
+		await Task.Delay(TimeSpan.FromSeconds(CriticalAfterSeconds), token);
+
+		// Fresh generators, because the streaming tasks are still using the shared ones.
+		var others = reporting.Where(sensor => sensor != target).ToList();
+		var burstGenerators = others
+			.Select((sensor, index) => new ReadingGenerator(sensor.Category, 1000 + index))
+			.ToList();
+
+		var burst = new List<Task>();
+
+		for (var index = 0; index < CriticalBurstReadings; index++)
+		{
+			var position = index % others.Count;
+			var reading = burstGenerators[position].Next(others[position].MacAddress, DateTime.UtcNow);
+			burst.Add(gateway.PostReadingAsync(reading, token));
+		}
+
+		await Task.WhenAll(burst);
+
+		await gateway.PostReadingAsync(new DeviceReading
+		{
+			MacAddress = target.MacAddress,
+			Value = CriticalMoisture,
+			RecordedAt = DateTime.UtcNow,
+			Rssi = -60
+		}, token);
+
+		Console.WriteLine($"Sent {CriticalBurstReadings} readings and then a moisture of {CriticalMoisture}% from {target.MacAddress}.");
+	}
+	catch (OperationCanceledException)
+	{
+		return;
+	}
+	catch (HttpRequestException problem)
+	{
+		Console.WriteLine($"  --critical could not post: {problem.Message}");
+	}
+}
+
+//..............................................................................//
 
 //checks whether this sensor is inside its quiet spell
 bool IsDropped(string macAddress)
