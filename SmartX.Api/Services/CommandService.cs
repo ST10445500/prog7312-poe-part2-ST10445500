@@ -19,10 +19,12 @@ namespace SmartX.Api.Services
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly CommandHistory<PumpCommand> _history;
         private readonly SensorStore _sensors;
+        private readonly PendingCommands _pending;
 
-        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, SensorStore sensors)
+        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, SensorStore sensors, PendingCommands pending)
         {
             _sensors = sensors;
+            _pending = pending;
             _telemetry = telemetry;
             _cache = cache;
             _queue = queue;
@@ -110,10 +112,21 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
+        //retrieves the command waiting for a device and clears it, or null if nothing is waiting
+        public bool? TakePending(string macAddress)
+        {
+            return _pending.TryTake(macAddress, out var open) ? open : null;
+        }
+
+        //..............................................................................//
+
         //records the state as a reading and puts it on the stream, the same as if the device had sent it
         private void Apply(string macAddress, bool open)
         {
             var now = DateTime.UtcNow;
+
+            // The device has to be told too, or its next reading puts the old state back.
+            _pending.Set(macAddress, open);
 
             _telemetry.RecordValveState(macAddress, open, now);
 

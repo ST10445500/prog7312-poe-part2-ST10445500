@@ -50,6 +50,7 @@ namespace SmartX.Simulator
 
         private double _value;
         private bool _state;
+        private bool _justCommanded;
 
         public ReadingGenerator(SensorCategory category, int seed)
         {
@@ -63,6 +64,15 @@ namespace SmartX.Simulator
             _value = category == SensorCategory.PowerConsumption
                 ? (MinWatts + MaxWatts) / 2
                 : (MinMoisture + MaxMoisture) / 2;
+        }
+
+        //..............................................................................//
+
+        //moves the valve to the state the gateway told it to go to, so the next reading reports it
+        public void SetState(bool open)
+        {
+            _state = open;
+            _justCommanded = true;
         }
 
         //..............................................................................//
@@ -143,6 +153,13 @@ namespace SmartX.Simulator
         //produces the next valve state, which mostly stays where it was
         private bool NextState()
         {
+            // The reading straight after a command has to say what it was told, so it cannot spike.
+            if (_justCommanded)
+            {
+                _justCommanded = false;
+                return _state;
+            }
+
             // A state change counts as a spike, at the same odds as the other two.
             if (IsSpike())
             {

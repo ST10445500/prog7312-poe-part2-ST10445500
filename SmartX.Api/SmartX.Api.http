@@ -277,6 +277,9 @@ Content-Type: application/json
 
 { "macAddress": "00:00:00:00:00:00", "open": true }
 
+### what a valve would be told next, 200 once and then 204, an unregistered mac gives 404
+GET {{SmartX.Api_HostAddress}}/api/commands/pending/AA:BB:CC:DD:EE:03
+
 ### undo the newest override, a second undo with nothing left should 409
 POST {{SmartX.Api_HostAddress}}/api/commands/undo
 

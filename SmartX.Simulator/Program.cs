@@ -246,6 +246,25 @@ async Task StreamSensorAsync(SensorRegistration sensor, CancellationToken token)
 				continue;
 			}
 
+			// A pump or valve asks for an override before it reports, so what it says matches what it was told.
+			if (sensor.Category == SensorCategory.Actuator)
+			{
+				try
+				{
+					var pending = await gateway.GetPendingAsync(sensor.MacAddress, token);
+
+					if (pending != null)
+					{
+						generator.SetState(pending.Value);
+					}
+				}
+				catch (HttpRequestException problem)
+				{
+					// A failed ask must not silence the reading too, or the node looks dropped.
+					Console.WriteLine($"  {sensor.MacAddress} could not check for commands: {problem.Message}");
+				}
+			}
+
 			var reading = generator.Next(sensor.MacAddress, DateTime.UtcNow);
 
 			if (string.Equals(sensor.MacAddress, faultMac, StringComparison.OrdinalIgnoreCase))

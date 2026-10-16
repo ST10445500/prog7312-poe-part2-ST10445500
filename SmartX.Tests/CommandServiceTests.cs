@@ -33,7 +33,7 @@ namespace SmartX.Tests
             var queue = new PacketQueue<StreamPacket>();
             var history = new CommandHistory<PumpCommand>();
             var sensors = new SensorStore();
-            var service = new CommandService(new TelemetryStore(), cache, queue, history, sensors);
+            var service = new CommandService(new TelemetryStore(), cache, queue, history, sensors, new PendingCommands());
             return (service, cache, queue, history, sensors);
         }
 
@@ -315,6 +315,103 @@ namespace SmartX.Tests
             var change = Assert.Single(command!.Changes);
             Assert.Equal(MacC, change.MacAddress);
             Assert.Equal(1, history.Count);
+        }
+
+        [Fact]
+        public void TakePending_AfterSend_ReturnsTheCommandOnce()
+        {
+            // Arrange
+            var (service, _, _, _) = Build();
+            service.Send(MacA, true);
+
+            // Act
+            var first = service.TakePending(MacA);
+            var second = service.TakePending(MacA);
+
+            // Assert
+            Assert.True(first);
+            Assert.Null(second);
+        }
+
+        [Fact]
+        public void TakePending_NothingSent_ReturnsNull()
+        {
+            // Arrange
+            var (service, _, _, _) = Build();
+
+            // Act
+            var pending = service.TakePending(MacA);
+
+            // Assert
+            Assert.Null(pending);
+        }
+
+        [Fact]
+        public void TakePending_TwoSendsBeforeTheValveAsks_ReturnsTheLatest()
+        {
+            // Arrange
+            var (service, _, _, _) = Build();
+            service.Send(MacA, true);
+            service.Send(MacA, false);
+
+            // Act
+            var pending = service.TakePending(MacA);
+
+            // Assert
+            Assert.False(pending);
+        }
+
+        [Fact]
+        public void TakePending_AfterShutAll_HoldsClosedForOnlyTheOnesThatWereOpen()
+        {
+            // Arrange
+            var (service, cache, _, _, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            Register(sensors, MacB, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            SeedValve(cache, MacB, false);
+            service.ShutAll();
+
+            // Act
+            var forA = service.TakePending(MacA);
+            var forB = service.TakePending(MacB);
+
+            // Assert
+            Assert.False(forA);
+            Assert.Null(forB);
+        }
+
+        [Fact]
+        public void TakePending_ShutAllWithNothingOpen_LeavesNothingWaiting()
+        {
+            // Arrange
+            var (service, cache, _, _, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            SeedValve(cache, MacA, false);
+            service.ShutAll();
+
+            // Act
+            var pending = service.TakePending(MacA);
+
+            // Assert
+            Assert.Null(pending);
+        }
+
+        [Fact]
+        public void TakePending_AfterUndo_HoldsTheStateThatWasPutBack()
+        {
+            // Arrange
+            var (service, cache, _, _) = Build();
+            SeedValve(cache, MacA, true);
+            service.Send(MacA, false);
+            service.TakePending(MacA);
+            service.TryUndo(out _);
+
+            // Act
+            var pending = service.TakePending(MacA);
+
+            // Assert
+            Assert.True(pending);
         }
     }
 }

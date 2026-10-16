@@ -60,6 +60,25 @@ namespace SmartX.Simulator
 
         //..............................................................................//
 
+        //asks whether the gateway has an override waiting for this device, null if it has none
+        public async Task<bool?> GetPendingAsync(string macAddress, CancellationToken token)
+        {
+            var response = await _http.GetAsync($"api/commands/pending/{macAddress}", token);
+
+            // Nothing waiting is the usual answer, so it is not treated as a failure.
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var command = await response.Content.ReadFromJsonAsync<PumpCommandRequest>(JsonOptions, token);
+            return command?.Open;
+        }
+
+        //..............................................................................//
+
         //builds the json settings every call from this client uses
         private static JsonSerializerOptions CreateJsonOptions()
         {

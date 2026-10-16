@@ -66,6 +66,29 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
+        //hands a pump or valve the override waiting for it, which a device calls for before it reports
+        [HttpGet("pending/{macAddress}")]
+        public ActionResult<PumpCommandRequest> Pending(string macAddress)
+        {
+            var sensor = _sensors.Find(macAddress);
+
+            if (sensor == null)
+            {
+                return NotFound($"No sensor registered with MAC address {macAddress}.");
+            }
+
+            var open = _commands.TakePending(sensor.MacAddress);
+
+            if (open == null)
+            {
+                return NoContent();
+            }
+
+            return Ok(new PumpCommandRequest { MacAddress = sensor.MacAddress, Open = open.Value });
+        }
+
+        //..............................................................................//
+
         //puts back the state the newest override replaced
         [HttpPost("undo")]
         public ActionResult Undo()
