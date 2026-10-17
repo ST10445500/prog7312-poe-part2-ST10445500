@@ -14,7 +14,12 @@ using SmartX.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The thresholds and timings come from config, and a bad one stops the api here with its name.
+var streamSettings = builder.Configuration.GetSection("Stream").Get<StreamSettings>() ?? new StreamSettings();
+streamSettings.Validate();
+
 // Application services
+builder.Services.AddSingleton(streamSettings);
 builder.Services.AddSingleton<SensorStore>();
 builder.Services.AddSingleton<DeploymentStore>();
 builder.Services.AddSingleton<DeploymentTreeValidator>();
@@ -24,7 +29,7 @@ builder.Services.AddSingleton<AttachmentStore>();
 builder.Services.AddSingleton<AttachmentEncryption>();
 builder.Services.AddSingleton<PacketQueue<StreamPacket>>();
 builder.Services.AddSingleton<AlertQueue<StreamAlert>>();
-builder.Services.AddSingleton(new HistoryLog<HistoryPoint>(500));
+builder.Services.AddSingleton(new HistoryLog<HistoryPoint>(streamSettings.HistoryCap));
 builder.Services.AddSingleton<ActiveFaults>();
 builder.Services.AddSingleton<AlertRules>();
 builder.Services.AddSingleton<StreamStats>();

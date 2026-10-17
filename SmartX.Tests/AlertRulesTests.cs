@@ -214,7 +214,7 @@ namespace SmartX.Tests
             var now = DateTime.UtcNow;
             var devices = new List<DeviceState>
             {
-                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(AlertRules.SilentSeconds - 1)) }
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(new StreamSettings().SilentSeconds - 1)) }
             };
 
             // Act
@@ -232,7 +232,7 @@ namespace SmartX.Tests
             var now = DateTime.UtcNow;
             var devices = new List<DeviceState>
             {
-                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(AlertRules.SilentSeconds + 1)) },
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-(new StreamSettings().SilentSeconds + 1)) },
                 new DeviceState { MacAddress = "AA:BB:CC:DD:EE:02", LastSeen = now.AddSeconds(-2) }
             };
 
@@ -240,6 +240,63 @@ namespace SmartX.Tests
             var silent = rules.FindSilent(devices, now);
 
             // Assert
+            Assert.Equal(new[] { "AA:BB:CC:DD:EE:01" }, silent);
+        }
+
+        [Fact]
+        public void Evaluate_LoweredHighWatts_RaisesForAReadingTheDefaultAllows()
+        {
+            // Arrange
+            var defaultRules = new AlertRules();
+            var lowered = new AlertRules(new StreamSettings { HighWatts = 300 });
+            var packet = Packet(SensorCategory.PowerConsumption, 350);
+
+            // Act
+            var byDefault = defaultRules.Evaluate(packet);
+            var alert = lowered.Evaluate(packet);
+
+            // Assert
+            Assert.Null(byDefault);
+            Assert.NotNull(alert);
+            Assert.Equal("HighWatts", alert.Rule);
+        }
+
+        [Fact]
+        public void Evaluate_RaisedLowMoisture_RaisesForAReadingTheDefaultAllows()
+        {
+            // Arrange
+            var defaultRules = new AlertRules();
+            var raised = new AlertRules(new StreamSettings { LowMoisturePercent = 30 });
+            var packet = Packet(SensorCategory.Environmental, 25);
+
+            // Act
+            var byDefault = defaultRules.Evaluate(packet);
+            var alert = raised.Evaluate(packet);
+
+            // Assert
+            Assert.Null(byDefault);
+            Assert.NotNull(alert);
+            Assert.Equal("LowMoisture", alert.Rule);
+        }
+
+        [Fact]
+        public void FindSilent_ShorterSilentSeconds_FlagsADeviceTheDefaultLeavesAlone()
+        {
+            // Arrange
+            var defaultRules = new AlertRules();
+            var shorter = new AlertRules(new StreamSettings { SilentSeconds = 5 });
+            var now = DateTime.UtcNow;
+            var devices = new List<DeviceState>
+            {
+                new DeviceState { MacAddress = "AA:BB:CC:DD:EE:01", LastSeen = now.AddSeconds(-10) }
+            };
+
+            // Act
+            var byDefault = defaultRules.FindSilent(devices, now);
+            var silent = shorter.FindSilent(devices, now);
+
+            // Assert
+            Assert.Empty(byDefault);
             Assert.Equal(new[] { "AA:BB:CC:DD:EE:01" }, silent);
         }
 

@@ -11,20 +11,23 @@ using SmartX.Shared.Models;
 namespace SmartX.Api.Services
 {
     //checks one reading against the thresholds and says what is wrong with it, if anything
-    //the thresholds are hard coded for now
+    //the thresholds come from the Stream section of the settings
     public class AlertRules
     {
-        //soil moisture below this percent means the plot is drying out
-        public const double LowMoisturePercent = 15;
+        private readonly StreamSettings _settings;
 
-        //a meter drawing more than this many watts is overloaded, the simulator stays between 200 and 400
-        public const double HighWatts = 600;
+        //builds the rules with the default thresholds, which is what the tests use
+        public AlertRules() : this(new StreamSettings())
+        {
+        }
 
-        //a signal weaker than this many dBm is close to dropping off the mesh
-        public const int WeakRssi = -90;
+        //..............................................................................//
 
-        //a device that has not reported for this many seconds is counted as gone quiet
-        public const int SilentSeconds = 15;
+        //builds the rules with the thresholds from the Stream section of the settings
+        public AlertRules(StreamSettings settings)
+        {
+            _settings = settings;
+        }
 
         //..............................................................................//
 
@@ -38,17 +41,17 @@ namespace SmartX.Api.Services
             }
 
             // Moisture and power come next because they put crops and equipment at risk.
-            if (packet.Category == SensorCategory.Environmental && packet.Value < LowMoisturePercent)
+            if (packet.Category == SensorCategory.Environmental && packet.Value < _settings.LowMoisturePercent)
             {
                 return Build(packet, "LowMoisture", StreamAlert.Critical, $"Soil moisture is down to {packet.Value:0.#}%.");
             }
 
-            if (packet.Category == SensorCategory.PowerConsumption && packet.Value > HighWatts)
+            if (packet.Category == SensorCategory.PowerConsumption && packet.Value > _settings.HighWatts)
             {
                 return Build(packet, "HighWatts", StreamAlert.Critical, $"Meter is drawing {packet.Value:0}W.");
             }
 
-            if (packet.Radio.Rssi != null && packet.Radio.Rssi < WeakRssi)
+            if (packet.Radio.Rssi != null && packet.Radio.Rssi < _settings.WeakRssi)
             {
                 return Build(packet, "WeakSignal", StreamAlert.Warning, $"Signal is down to {packet.Radio.Rssi} dBm.");
             }
@@ -62,7 +65,7 @@ namespace SmartX.Api.Services
         public List<string> FindSilent(IEnumerable<DeviceState> devices, DateTime now)
         {
             return devices
-                .Where(device => now - device.LastSeen > TimeSpan.FromSeconds(SilentSeconds))
+                .Where(device => now - device.LastSeen > TimeSpan.FromSeconds(_settings.SilentSeconds))
                 .Select(device => device.MacAddress)
                 .ToList();
         }

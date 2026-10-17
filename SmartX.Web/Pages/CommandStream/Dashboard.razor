@@ -1,6 +1,7 @@
 @page "/commandstream"
 @inject HttpClient Http
 @inject DashboardState State
+@inject IConfiguration Config
 @implements IDisposable
 
 <PageTitle>Command Stream - Smart-X</PageTitle>
@@ -229,8 +230,11 @@ else if (_snapshot != null)
 }
 
 @code {
-    private const int PollIntervalMilliseconds = 1000;
+    private const int DefaultPollMilliseconds = 1000;
+    private const int LowestPollMilliseconds = 250;
     private const int HistoryRows = 15;
+
+    private int _pollMilliseconds = DefaultPollMilliseconds;
 
     private StreamSnapshot? _snapshot;
     private bool _loadFailed;
@@ -257,6 +261,12 @@ else if (_snapshot != null)
 
     protected override async Task OnInitializedAsync()
     {
+        // A missing, non-numeric or tiny setting falls back, so a typo cannot hammer the api.
+        if (int.TryParse(Config["PollIntervalMilliseconds"], out var configured) && configured >= LowestPollMilliseconds)
+        {
+            _pollMilliseconds = configured;
+        }
+
         State.OnChange += OnStateChanged;
         State.OnStreamChanged += OnStateChanged;
 
@@ -273,7 +283,7 @@ else if (_snapshot != null)
     // The poll stays as the fallback, and it is also what tries the hub again after the api was down.
     private async Task PollAsync(CancellationToken token)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PollIntervalMilliseconds));
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(_pollMilliseconds));
 
         try
         {

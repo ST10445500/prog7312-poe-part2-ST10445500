@@ -16,15 +16,6 @@ namespace SmartX.Api.Services
     //takes packets off the queue and updates the device cache with them
     public class StreamProcessor : BackgroundService
     {
-        // How long to rest when the queue is empty. Hard coded for now.
-        private const int IdleMilliseconds = 50;
-
-        // How often to look for devices that have gone quiet. Hard coded for now.
-        private const int SilentCheckMilliseconds = 1000;
-
-        // The least time between two pushes to the page. Hard coded for now.
-        private const int PushMilliseconds = 250;
-
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly DeviceCache _cache;
         private readonly SensorStore _sensors;
@@ -35,6 +26,7 @@ namespace SmartX.Api.Services
         private readonly AlertRules _rules;
         private readonly IHubContext<StreamHub> _hub;
         private readonly ILogger<StreamProcessor> _logger;
+        private readonly StreamSettings _settings;
 
         // When the silent check last ran, so it runs about once a second and not on every packet.
         private long _lastSilentCheck;
@@ -43,8 +35,9 @@ namespace SmartX.Api.Services
         private long _lastPush;
         private bool _changed;
 
-        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules, IHubContext<StreamHub> hub, ILogger<StreamProcessor> logger)
+        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules, IHubContext<StreamHub> hub, ILogger<StreamProcessor> logger, StreamSettings settings)
         {
+            _settings = settings;
             _hub = hub;
             _logger = logger;
             _history = history;
@@ -81,7 +74,7 @@ namespace SmartX.Api.Services
                     continue;
                 }
 
-                await Task.Delay(IdleMilliseconds, stoppingToken);
+                await Task.Delay(_settings.IdleMilliseconds, stoppingToken);
             }
         }
 
@@ -92,7 +85,7 @@ namespace SmartX.Api.Services
         {
             var now = Environment.TickCount64;
 
-            if (now - _lastSilentCheck < SilentCheckMilliseconds)
+            if (now - _lastSilentCheck < _settings.SilentCheckMilliseconds)
             {
                 return;
             }
@@ -116,7 +109,7 @@ namespace SmartX.Api.Services
         {
             var now = Environment.TickCount64;
 
-            if (!_changed || now - _lastPush < PushMilliseconds)
+            if (!_changed || now - _lastPush < _settings.PushMilliseconds)
             {
                 return;
             }
