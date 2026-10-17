@@ -184,6 +184,14 @@ else if (_snapshot != null)
                     <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseHistory">Close</button>
                 </div>
 
+                <div class="btn-group btn-group-sm mb-2" role="group" aria-label="History range">
+                    @foreach (var (minutes, label) in HistoryRanges)
+                    {
+                        <button type="button" class="btn @(State.HistoryMinutes == minutes ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="() => ChooseRange(minutes)">@label</button>
+                    }
+                </div>
+
                 @if (_historyFailed)
                 {
                     <div class="alert alert-danger mb-0">Could not load the history for this device.</div>
@@ -194,14 +202,16 @@ else if (_snapshot != null)
                 }
                 else if (_history.Count == 0)
                 {
-                    <div class="text-muted">No readings kept for this device yet.</div>
+                    <div class="text-muted">
+                        @(State.HistoryMinutes == 0 ? "No readings kept for this device yet." : "No readings in this range.")
+                    </div>
                 }
                 else
                 {
                     <div class="mb-2 text-primary">
-                        <Sparkline Values="_historyValues" />
+                        <TimelineChart Points="_history" />
                     </div>
-                    <div class="small text-muted mb-2">Newest @Math.Min(_history.Count, HistoryRows) of @_history.Count kept.</div>
+                    <div class="small text-muted mb-2">Newest @Math.Min(_history.Count, HistoryRows) of @_history.Count in this range.</div>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
                             <thead>
@@ -234,6 +244,14 @@ else if (_snapshot != null)
     private const int LowestPollMilliseconds = 250;
     private const int HistoryRows = 15;
 
+    // Minutes back from now, where 0 means everything the log kept.
+    private static readonly (int Minutes, string Label)[] HistoryRanges =
+    {
+        (1, "Last minute"),
+        (5, "Last 5 minutes"),
+        (0, "All kept")
+    };
+
     private int _pollMilliseconds = DefaultPollMilliseconds;
 
     private StreamSnapshot? _snapshot;
@@ -249,7 +267,6 @@ else if (_snapshot != null)
 
     private string? _historyMac;
     private List<HistoryPoint>? _history;
-    private List<double> _historyValues = new();
     private bool _historyFailed;
 
     // The select works in text, the state holds the category itself.
@@ -350,18 +367,28 @@ else if (_snapshot != null)
     {
         var mac = _historyMac;
 
+        var minutes = State.HistoryMinutes;
+
         try
         {
-            var points = await Http.GetFromJsonAsync<List<HistoryPoint>>($"api/stream/devices/{Uri.EscapeDataString(mac!)}/history", ApiJsonOptions.Default);
+            var url = $"api/stream/devices/{Uri.EscapeDataString(mac!)}/history";
 
-            // The card may have been closed or switched while the call was out.
-            if (mac != _historyMac)
+            // The api does the narrowing, so the page only ever receives the range it draws.
+            if (minutes > 0)
+            {
+                var from = DateTime.UtcNow.AddMinutes(-minutes).ToString("o");
+                url += $"?from={Uri.EscapeDataString(from)}";
+            }
+
+            var points = await Http.GetFromJsonAsync<List<HistoryPoint>>(url, ApiJsonOptions.Default);
+
+            // The card may have been closed, switched or given another range while the call was out.
+            if (mac != _historyMac || minutes != State.HistoryMinutes)
             {
                 return;
             }
 
             _history = points ?? new List<HistoryPoint>();
-            _historyValues = _history.Select(ReadingValue).ToList();
             _historyFailed = false;
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
@@ -370,17 +397,15 @@ else if (_snapshot != null)
         }
     }
 
-    // A valve has no number in its reading, so open is 1 and closed is 0.
-    private static double ReadingValue(HistoryPoint point)
+    // Changing the range raises OnChange, which reloads the page and the card with it.
+    private void ChooseRange(int minutes)
     {
-        if (point.State != null)
+        if (State.HistoryMinutes != minutes)
         {
-            return point.State.Value ? 1 : 0;
+            _history = null;
         }
 
-        var digits = new string(point.Reading.TakeWhile(c => char.IsDigit(c) || c == '.' || c == '-').ToArray());
-
-        return double.TryParse(digits, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
+        State.HistoryMinutes = minutes;
     }
 
     private async Task LoadSnapshotAsync()

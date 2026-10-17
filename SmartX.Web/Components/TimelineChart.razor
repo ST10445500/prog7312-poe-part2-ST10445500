@@ -1,0 +1,116 @@
+@if (Points.Count < 2 || _spanSeconds <= 0)
+{
+    <div class="text-muted small">Not enough readings in this range to draw a line.</div>
+}
+else
+{
+    <svg class="w-100" viewBox="0 0 @Width @Height" role="img" aria-label="Readings over time">
+        <g class="text-muted" fill="currentColor" font-size="11">
+            <text x="@(Left - 6)" y="@(Top + 4)" text-anchor="end">@HighLabel</text>
+            <text x="@(Left - 6)" y="@(Height - Bottom + 4)" text-anchor="end">@LowLabel</text>
+            <text x="@Left" y="@(Height - 5)" text-anchor="start">@Points[0].RecordedAt.ToLocalTime().ToString("HH:mm:ss")</text>
+            <text x="@(Width - Right)" y="@(Height - 5)" text-anchor="end">@Points[^1].RecordedAt.ToLocalTime().ToString("HH:mm:ss")</text>
+        </g>
+        <line x1="@Left" y1="@(Height - Bottom)" x2="@(Width - Right)" y2="@(Height - Bottom)" stroke="currentColor" stroke-opacity="0.25" />
+        <line x1="@Left" y1="@Top" x2="@Left" y2="@(Height - Bottom)" stroke="currentColor" stroke-opacity="0.25" />
+        <polyline points="@Line" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+        <circle cx="@LastX" cy="@LastY" r="3.5" fill="currentColor" />
+    </svg>
+
+    <div class="small text-muted">
+        @Points.Count readings, from @_low.ToString("0.#", Invariant) to @_high.ToString("0.#", Invariant), latest @Points[^1].Reading
+    </div>
+}
+
+@code {
+    private const int Width = 600;
+    private const int Height = 160;
+    private const int Left = 48;
+    private const int Right = 12;
+    private const int Top = 10;
+    private const int Bottom = 24;
+
+    private static readonly System.Globalization.CultureInfo Invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+    private List<double> _values = new();
+    private double _low;
+    private double _high;
+    private double _spanSeconds;
+    private bool _isValve;
+
+    // Oldest first, as the history route hands them back.
+    [Parameter, EditorRequired]
+    public List<HistoryPoint> Points { get; set; } = new();
+
+    private string HighLabel => _isValve ? "open" : _high.ToString("0.#", Invariant);
+
+    private string LowLabel => _isValve ? "closed" : _low.ToString("0.#", Invariant);
+
+    protected override void OnParametersSet()
+    {
+        _values = Points.Select(ReadingValue).ToList();
+        _isValve = Points.Count > 0 && Points.All(point => point.State != null);
+
+        _low = _isValve ? 0 : (_values.Count > 0 ? _values.Min() : 0);
+        _high = _isValve ? 1 : (_values.Count > 0 ? _values.Max() : 0);
+
+        _spanSeconds = Points.Count < 2 ? 0 : (Points[^1].RecordedAt - Points[0].RecordedAt).TotalSeconds;
+    }
+
+    // Where a moment falls along the bottom, so a quiet stretch shows as a long flat run.
+    private double XFor(HistoryPoint point)
+    {
+        var fraction = (point.RecordedAt - Points[0].RecordedAt).TotalSeconds / _spanSeconds;
+
+        return Left + fraction * (Width - Left - Right);
+    }
+
+    private double YFor(double value)
+    {
+        var span = _high - _low == 0 ? 1 : _high - _low;
+
+        return Height - Bottom - (value - _low) / span * (Height - Bottom - Top);
+    }
+
+    private double LastX => XFor(Points[^1]);
+
+    private double LastY => YFor(_values[^1]);
+
+    // A valve jumps between its two states, so it gets a step, a sensor gets a slope.
+    private string Line
+    {
+        get
+        {
+            var parts = new List<string>();
+
+            for (var index = 0; index < Points.Count; index++)
+            {
+                var x = XFor(Points[index]);
+                var y = YFor(_values[index]);
+
+                if (_isValve && index > 0)
+                {
+                    parts.Add($"{x.ToString("0.0", Invariant)},{YFor(_values[index - 1]).ToString("0.0", Invariant)}");
+                }
+
+                parts.Add($"{x.ToString("0.0", Invariant)},{y.ToString("0.0", Invariant)}");
+            }
+
+            return string.Join(" ", parts);
+        }
+    }
+
+    // A valve has no number in its reading, so open is 1 and closed is 0.
+    private static double ReadingValue(HistoryPoint point)
+    {
+        if (point.State != null)
+        {
+            return point.State.Value ? 1 : 0;
+        }
+
+        var digits = new string(point.Reading.TakeWhile(c => char.IsDigit(c) || c == '.' || c == '-').ToArray());
+
+        // A silly long run of digits parses to infinity, which would turn every point into NaN.
+        return double.TryParse(digits, System.Globalization.NumberStyles.Float, Invariant, out var value) && double.IsFinite(value) ? value : 0;
+    }
+}

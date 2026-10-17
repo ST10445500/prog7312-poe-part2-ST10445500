@@ -18,6 +18,7 @@ namespace SmartX.Web.Services
         private string _searchText = string.Empty;
         private SensorCategory? _category;
         private bool _alertsOnly;
+        private int _historyMinutes;
 
         public DashboardState(HttpClient http)
         {
@@ -100,6 +101,24 @@ namespace SmartX.Web.Services
                 }
 
                 _alertsOnly = value;
+                OnChange?.Invoke();
+            }
+        }
+
+        //..............................................................................//
+
+        //retrieves or sets how many minutes back the history card draws, 0 for everything kept
+        public int HistoryMinutes
+        {
+            get => _historyMinutes;
+            set
+            {
+                if (_historyMinutes == value)
+                {
+                    return;
+                }
+
+                _historyMinutes = value;
                 OnChange?.Invoke();
             }
         }
