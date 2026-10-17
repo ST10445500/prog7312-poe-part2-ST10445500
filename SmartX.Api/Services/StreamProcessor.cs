@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.SignalR;
 using SmartX.Api.Collections;
+using SmartX.Api.Hubs;
 using SmartX.Api.Models.Stream;
 using SmartX.Shared.Models;
 
@@ -20,6 +22,9 @@ namespace SmartX.Api.Services
         // How often to look for devices that have gone quiet. Hard coded for now.
         private const int SilentCheckMilliseconds = 1000;
 
+        // The least time between two pushes to the page. Hard coded for now.
+        private const int PushMilliseconds = 250;
+
         private readonly PacketQueue<StreamPacket> _queue;
         private readonly DeviceCache _cache;
         private readonly SensorStore _sensors;
@@ -28,12 +33,20 @@ namespace SmartX.Api.Services
         private readonly HistoryLog<HistoryPoint> _history;
         private readonly ActiveFaults _faults;
         private readonly AlertRules _rules;
+        private readonly IHubContext<StreamHub> _hub;
+        private readonly ILogger<StreamProcessor> _logger;
 
         // When the silent check last ran, so it runs about once a second and not on every packet.
         private long _lastSilentCheck;
 
-        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules)
+        // When the page was last told, and whether anything has changed since.
+        private long _lastPush;
+        private bool _changed;
+
+        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules, IHubContext<StreamHub> hub, ILogger<StreamProcessor> logger)
         {
+            _hub = hub;
+            _logger = logger;
             _history = history;
             _faults = faults;
             _rules = rules;
@@ -52,6 +65,7 @@ namespace SmartX.Api.Services
             while (!stoppingToken.IsCancellationRequested)
             {
                 CheckSilent();
+                await PushIfDueAsync(stoppingToken);
 
                 // Alerts go first, whatever is waiting on the ordinary queue.
                 if (_alerts.TryDequeue(out var alert) && alert != null)
@@ -88,7 +102,36 @@ namespace SmartX.Api.Services
             foreach (var mac in _rules.FindSilent(_cache.GetAll(), DateTime.UtcNow))
             {
                 // Already marked devices come back false, so a quiet device is only noted once.
-                _faults.MarkDisconnected(mac);
+                if (_faults.MarkDisconnected(mac))
+                {
+                    _changed = true;
+                }
+            }
+        }
+
+        //..............................................................................//
+
+        //tells the page something changed, at most every quarter second so a burst is one message
+        private async Task PushIfDueAsync(CancellationToken stoppingToken)
+        {
+            var now = Environment.TickCount64;
+
+            if (!_changed || now - _lastPush < PushMilliseconds)
+            {
+                return;
+            }
+
+            _changed = false;
+            _lastPush = now;
+
+            try
+            {
+                await _hub.Clients.All.SendAsync("StreamChanged", stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A failed push must not stop the queue draining, the page still polls.
+                _logger.LogWarning(ex, "Could not push to the stream hub.");
             }
         }
 
@@ -113,6 +156,8 @@ namespace SmartX.Api.Services
                 State = packet.State,
                 Rssi = packet.Radio.Rssi
             });
+
+            _changed = true;
         }
     }
 }

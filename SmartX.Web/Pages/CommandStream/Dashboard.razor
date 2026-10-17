@@ -15,8 +15,35 @@
     </div>
 }
 
-<div class="mb-3">
-    <input class="form-control font-monospace" placeholder="Search by MAC address" @bind="State.SearchText" @bind:event="oninput" />
+<div class="row g-2 mb-3 align-items-center">
+    <div class="col-12 col-md">
+        <input class="form-control font-monospace" placeholder="Search by MAC address" @bind="State.SearchText" @bind:event="oninput" />
+    </div>
+    <div class="col-6 col-md-auto">
+        <select class="form-select" @bind="CategoryText">
+            <option value="">All categories</option>
+            @foreach (var category in Enum.GetValues<SensorCategory>())
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+    </div>
+    <div class="col-6 col-md-auto">
+        <div class="form-check">
+            <input id="alertsOnly" class="form-check-input" type="checkbox" @bind="State.AlertsOnly" />
+            <label class="form-check-label" for="alertsOnly">Alerts only</label>
+        </div>
+    </div>
+    <div class="col-12 col-md-auto">
+        @if (State.Connected)
+        {
+            <span class="badge text-bg-success">Live</span>
+        }
+        else
+        {
+            <span class="badge text-bg-secondary">Polling</span>
+        }
+    </div>
 </div>
 
 @if (_snapshot == null && !_loadFailed)
@@ -85,13 +112,17 @@ else if (_snapshot != null)
     {
         <div class="card">
             <div class="card-body text-center text-muted py-5">
-                @if (string.IsNullOrWhiteSpace(State.SearchText))
+                @if (!string.IsNullOrWhiteSpace(State.SearchText))
                 {
-                    <span>No devices have reported yet. Start the simulator and they will show up here.</span>
+                    <span>No devices match "@State.SearchText".</span>
+                }
+                else if (State.Category != null || State.AlertsOnly)
+                {
+                    <span>No devices match the filters.</span>
                 }
                 else
                 {
-                    <span>No devices match "@State.SearchText".</span>
+                    <span>No devices have reported yet. Start the simulator and they will show up here.</span>
                 }
             </div>
         </div>
@@ -124,6 +155,8 @@ else if (_snapshot != null)
                             <td>@(device.Radio.Protocol ?? "-")</td>
                             <td class="text-muted small">@device.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
                             <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => ShowHistoryAsync(device.MacAddress)">History</button>
                                 @if (device.Category == SensorCategory.Actuator)
                                 {
                                     <button type="button" class="btn btn-sm btn-primary" disabled="@_isSending"
@@ -138,10 +171,64 @@ else if (_snapshot != null)
             </table>
         </div>
     }
+
+    @if (_historyMac != null)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h6 mb-0">History for <span class="font-monospace">@_historyMac</span></h2>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseHistory">Close</button>
+                </div>
+
+                @if (_historyFailed)
+                {
+                    <div class="alert alert-danger mb-0">Could not load the history for this device.</div>
+                }
+                else if (_history == null)
+                {
+                    <div class="text-muted">Loading...</div>
+                }
+                else if (_history.Count == 0)
+                {
+                    <div class="text-muted">No readings kept for this device yet.</div>
+                }
+                else
+                {
+                    <div class="mb-2 text-primary">
+                        <Sparkline Values="_historyValues" />
+                    </div>
+                    <div class="small text-muted mb-2">Newest @Math.Min(_history.Count, HistoryRows) of @_history.Count kept.</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Recorded</th>
+                                    <th>Reading</th>
+                                    <th>RSSI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var point in _history.AsEnumerable().Reverse().Take(HistoryRows))
+                                {
+                                    <tr>
+                                        <td class="text-muted small">@point.RecordedAt.ToLocalTime().ToString("HH:mm:ss")</td>
+                                        <td class="font-monospace">@point.Reading</td>
+                                        <td>@(point.Rssi?.ToString() ?? "-") dBm</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 }
 
 @code {
     private const int PollIntervalMilliseconds = 1000;
+    private const int HistoryRows = 15;
 
     private StreamSnapshot? _snapshot;
     private bool _loadFailed;
@@ -151,17 +238,34 @@ else if (_snapshot != null)
     private bool _commandFailed;
     private string? _commandMessage;
 
+    private string? _historyMac;
+    private List<HistoryPoint>? _history;
+    private List<double> _historyValues = new();
+    private bool _historyFailed;
+
+    // The select works in text, the state holds the category itself.
+    private string CategoryText
+    {
+        get => State.Category?.ToString() ?? string.Empty;
+        set => State.Category = Enum.TryParse<SensorCategory>(value, out var category) ? category : null;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         State.OnChange += OnStateChanged;
+        State.OnStreamChanged += OnStateChanged;
 
         await LoadSnapshotAsync();
 
         _polling = new CancellationTokenSource();
 
         _ = PollAsync(_polling.Token);
+
+        // Opened after the first load so a slow hub never holds the page up.
+        await State.StartAsync();
     }
 
+    // The poll stays as the fallback, and it is also what tries the hub again after the api was down.
     private async Task PollAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PollIntervalMilliseconds));
@@ -170,8 +274,12 @@ else if (_snapshot != null)
         {
             while (await timer.WaitForNextTickAsync(token))
             {
-                await LoadSnapshotAsync();
-                StateHasChanged();
+                if (!State.Connected)
+                {
+                    await State.StartAsync();
+                }
+
+                await ReloadAsync();
             }
         }
         catch (OperationCanceledException)
@@ -179,11 +287,81 @@ else if (_snapshot != null)
         }
     }
 
+    // Loads the list again, and the open history with it, then redraws.
+    private async Task ReloadAsync()
+    {
+        await LoadSnapshotAsync();
+
+        if (_historyMac != null)
+        {
+            await LoadHistoryAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ShowHistoryAsync(string macAddress)
+    {
+        _historyMac = macAddress;
+        _history = null;
+        _historyFailed = false;
+
+        await LoadHistoryAsync();
+    }
+
+    private void CloseHistory()
+    {
+        _historyMac = null;
+        _history = null;
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        var mac = _historyMac;
+
+        try
+        {
+            var points = await Http.GetFromJsonAsync<List<HistoryPoint>>($"api/stream/devices/{Uri.EscapeDataString(mac!)}/history", ApiJsonOptions.Default);
+
+            // The card may have been closed or switched while the call was out.
+            if (mac != _historyMac)
+            {
+                return;
+            }
+
+            _history = points ?? new List<HistoryPoint>();
+            _historyValues = _history.Select(ReadingValue).ToList();
+            _historyFailed = false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _historyFailed = true;
+        }
+    }
+
+    // A valve has no number in its reading, so open is 1 and closed is 0.
+    private static double ReadingValue(HistoryPoint point)
+    {
+        if (point.State != null)
+        {
+            return point.State.Value ? 1 : 0;
+        }
+
+        var digits = new string(point.Reading.TakeWhile(c => char.IsDigit(c) || c == '.' || c == '-').ToArray());
+
+        return double.TryParse(digits, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
+    }
+
     private async Task LoadSnapshotAsync()
     {
         try
         {
-            var url = $"api/stream/snapshot?search={Uri.EscapeDataString(State.SearchText)}";
+            var url = $"api/stream/snapshot?search={Uri.EscapeDataString(State.SearchText)}&alertsOnly={State.AlertsOnly.ToString().ToLowerInvariant()}";
+
+            if (State.Category != null)
+            {
+                url += $"&category={State.Category}";
+            }
 
             _snapshot = await Http.GetFromJsonAsync<StreamSnapshot>(url, ApiJsonOptions.Default);
             _loadFailed = false;
@@ -236,16 +414,16 @@ else if (_snapshot != null)
         }
     }
 
-    // The box changes the text, so the list is asked for again straight away.
-    private async void OnStateChanged()
+    // A filter changed or the api pushed, so the list is asked for again straight away.
+    private void OnStateChanged()
     {
-        await LoadSnapshotAsync();
-        await InvokeAsync(StateHasChanged);
+        _ = ReloadAsync();
     }
 
     public void Dispose()
     {
         State.OnChange -= OnStateChanged;
+        State.OnStreamChanged -= OnStateChanged;
         _polling?.Cancel();
         _polling?.Dispose();
     }

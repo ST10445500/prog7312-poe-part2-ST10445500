@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using SmartX.Api.Collections;
+using SmartX.Api.Hubs;
 using SmartX.Api.Models.Stream;
 using SmartX.Api.Services;
 using SmartX.Shared.Models;
@@ -31,6 +32,7 @@ builder.Services.AddSingleton<DeviceCache>();
 builder.Services.AddSingleton<CommandHistory<PumpCommand>>();
 builder.Services.AddSingleton<PendingCommands>();
 builder.Services.AddSingleton<CommandService>();
+builder.Services.AddSignalR();
 builder.Services.AddHostedService<StreamProcessor>();
 
 // Category names arrive as strings.
@@ -46,7 +48,8 @@ var allowedOrigins = builder.Configuration
 builder.Services.AddCors(options =>
 {
 	options.AddPolicy("SmartXClient", policy =>
-		policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod());
+		// The hub connection sends credentials, which only works with explicit origins.
+		policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
 });
 
 var app = builder.Build();
@@ -72,6 +75,7 @@ app.UseCors("SmartXClient");
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<StreamHub>("/hubs/stream");
 
 app.Run();
 
