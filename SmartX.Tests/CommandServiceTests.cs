@@ -413,6 +413,78 @@ namespace SmartX.Tests
             // Assert
             Assert.True(pending);
         }
+
+        [Fact]
+        public void GetHistory_NoOverrides_ReturnsEmptyList()
+        {
+            // Arrange
+            var (service, _, _, _) = Build();
+
+            // Act
+            var summaries = service.GetHistory();
+
+            // Assert
+            Assert.Empty(summaries);
+        }
+
+        [Fact]
+        public void GetHistory_AfterShutAllOnTwoOpenValves_ReturnsOneSummaryWithBothDevices()
+        {
+            // Arrange
+            var (service, cache, _, _, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            Register(sensors, MacB, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            SeedValve(cache, MacB, true);
+            service.ShutAll();
+
+            // Act
+            var summaries = service.GetHistory();
+
+            // Assert
+            var summary = Assert.Single(summaries);
+            Assert.Equal(2, summary.Devices.Count);
+            Assert.Contains(summary.Devices, device => device.MacAddress == MacA);
+            Assert.Contains(summary.Devices, device => device.MacAddress == MacB);
+            Assert.All(summary.Devices, device => Assert.False(device.Open));
+            Assert.All(summary.Devices, device => Assert.True(device.PreviousOpen));
+        }
+
+        [Fact]
+        public void GetHistory_AfterUndo_ReturnsEmptyList()
+        {
+            // Arrange
+            var (service, cache, _, _, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            service.ShutAll();
+            service.TryUndo(out _);
+
+            // Act
+            var summaries = service.GetHistory();
+
+            // Assert
+            Assert.Empty(summaries);
+        }
+
+        [Fact]
+        public void GetHistory_SendThenShutAll_ReturnsShutAllFirst()
+        {
+            // Arrange
+            var (service, cache, _, _, sensors) = BuildWithSensors();
+            Register(sensors, MacA, SensorCategory.Actuator);
+            SeedValve(cache, MacA, true);
+            service.Send(MacB, true);
+            service.ShutAll();
+
+            // Act
+            var summaries = service.GetHistory();
+
+            // Assert
+            Assert.Equal(2, summaries.Count);
+            Assert.Equal("Shut all valves", summaries[0].Label);
+            Assert.Equal(MacB, summaries[1].Devices[0].MacAddress);
+        }
     }
 }
 

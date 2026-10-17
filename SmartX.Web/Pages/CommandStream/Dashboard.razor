@@ -108,6 +108,8 @@ else if (_snapshot != null)
                     OnClick="ShutAllAsync" />
     </div>
 
+    <UndoPanel Commands="_commands" Failed="_commandsFailed" />
+
     @if (_snapshot.Devices.Count == 0)
     {
         <div class="card">
@@ -238,6 +240,9 @@ else if (_snapshot != null)
     private bool _commandFailed;
     private string? _commandMessage;
 
+    private List<CommandSummary>? _commands;
+    private bool _commandsFailed;
+
     private string? _historyMac;
     private List<HistoryPoint>? _history;
     private List<double> _historyValues = new();
@@ -292,12 +297,28 @@ else if (_snapshot != null)
     {
         await LoadSnapshotAsync();
 
+        // Asked for every time, since an undo and a new override between two polls leave the depth the same.
+        await LoadCommandsAsync();
+
         if (_historyMac != null)
         {
             await LoadHistoryAsync();
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadCommandsAsync()
+    {
+        try
+        {
+            _commands = await Http.GetFromJsonAsync<List<CommandSummary>>("api/commands/history", ApiJsonOptions.Default);
+            _commandsFailed = false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _commandsFailed = true;
+        }
     }
 
     private async Task ShowHistoryAsync(string macAddress)
@@ -402,6 +423,7 @@ else if (_snapshot != null)
             _commandFailed = !response.IsSuccessStatusCode;
 
             await LoadSnapshotAsync();
+            await LoadCommandsAsync();
         }
         catch (HttpRequestException)
         {

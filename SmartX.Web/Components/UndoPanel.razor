@@ -1,0 +1,55 @@
+<div class="card mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-2">Overrides that can be undone</h2>
+
+        @if (Failed)
+        {
+            <div class="text-danger small">Could not load the overrides.</div>
+        }
+        else if (Commands == null)
+        {
+            <div class="text-muted small">Loading...</div>
+        }
+        else if (Commands.Count == 0)
+        {
+            <div class="text-muted small">No overrides to undo yet.</div>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @for (var index = 0; index < Commands.Count; index++)
+                {
+                    var command = Commands[index];
+
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between">
+                            <span>
+                                @command.Label
+                                @if (index == 0)
+                                {
+                                    <span class="badge text-bg-primary ms-1">next undo</span>
+                                }
+                            </span>
+                            <span class="text-muted small">@command.SentAt.ToLocalTime().ToString("HH:mm:ss")</span>
+                        </div>
+                        @foreach (var device in command.Devices)
+                        {
+                            <div class="small text-muted font-monospace">
+                                @device.MacAddress @(device.Open ? "opened" : "closed") (was @(device.PreviousOpen ? "open" : "closed"))
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    // Null while the first load is still out.
+    [Parameter]
+    public List<CommandSummary>? Commands { get; set; }
+
+    [Parameter]
+    public bool Failed { get; set; }
+}

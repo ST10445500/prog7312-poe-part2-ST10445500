@@ -41,6 +41,19 @@ namespace SmartX.Api.Collections
 
         //..............................................................................//
 
+        //retrieves a copy of every override, newest first, so the stack itself is never handed out
+        //copying is O(n) and the lock is held only while it happens
+        public List<T> GetAll()
+        {
+            lock (_lock)
+            {
+                // A stack enumerates from the top, which is the order undo takes them.
+                return _items.ToList();
+            }
+        }
+
+        //..............................................................................//
+
         //takes the newest override off, returning false if there is nothing to undo
         public bool TryPop(out T? item)
         {

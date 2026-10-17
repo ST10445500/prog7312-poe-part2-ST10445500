@@ -89,6 +89,15 @@ namespace SmartX.Api.Controllers
 
         //..............................................................................//
 
+        //retrieves the overrides that can be undone, newest first
+        [HttpGet("history")]
+        public ActionResult<List<CommandSummary>> History()
+        {
+            return _commands.GetHistory();
+        }
+
+        //..............................................................................//
+
         //puts back the state the newest override replaced
         [HttpPost("undo")]
         public ActionResult Undo()

@@ -280,6 +280,9 @@ Content-Type: application/json
 ### what a valve would be told next, 200 once and then 204, an unregistered mac gives 404
 GET {{SmartX.Api_HostAddress}}/api/commands/pending/AA:BB:CC:DD:EE:03
 
+### the overrides that can be undone, newest first
+GET {{SmartX.Api_HostAddress}}/api/commands/history
+
 ### undo the newest override, a second undo with nothing left should 409
 POST {{SmartX.Api_HostAddress}}/api/commands/undo
 

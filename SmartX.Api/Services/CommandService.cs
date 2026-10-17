@@ -112,6 +112,28 @@ namespace SmartX.Api.Services
 
         //..............................................................................//
 
+        //retrieves the overrides that can still be undone, newest first
+        public List<CommandSummary> GetHistory()
+        {
+            return _history.GetAll()
+                .Select(command => new CommandSummary
+                {
+                    Label = command.Label,
+                    SentAt = command.SentAt,
+                    Devices = command.Changes
+                        .Select(change => new CommandDeviceSummary
+                        {
+                            MacAddress = change.MacAddress,
+                            Open = change.Open,
+                            PreviousOpen = change.PreviousOpen
+                        })
+                        .ToList()
+                })
+                .ToList();
+        }
+
+        //..............................................................................//
+
         //retrieves the command waiting for a device and clears it, or null if nothing is waiting
         public bool? TakePending(string macAddress)
         {
