@@ -309,3 +309,19 @@ GET {{SmartX.Api_HostAddress}}/api/stream/devices?category=Actuator
 
 ### only devices with an active fault or gone quiet, narrowed again by mac text
 GET {{SmartX.Api_HostAddress}}/api/stream/devices?alertsOnly=true&category=Actuator&search=02
+
+
+### what needs attention and what has usually followed the last thing that happened
+GET {{SmartX.Api_HostAddress}}/api/insights
+
+### tell the engine about a search, after this it should suggest opening valve-b1
+POST {{SmartX.Api_HostAddress}}/api/insights/search
+Content-Type: application/json
+
+{ "text": "AA:BB:CC:DD:EE:05" }
+
+### blank search text should 400
+POST {{SmartX.Api_HostAddress}}/api/insights/search
+Content-Type: application/json
+
+{ "text": "  " }

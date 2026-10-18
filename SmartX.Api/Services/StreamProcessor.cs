@@ -27,6 +27,7 @@ namespace SmartX.Api.Services
         private readonly IHubContext<StreamHub> _hub;
         private readonly ILogger<StreamProcessor> _logger;
         private readonly StreamSettings _settings;
+        private readonly InsightService _insights;
 
         // When the silent check last ran, so it runs about once a second and not on every packet.
         private long _lastSilentCheck;
@@ -35,8 +36,9 @@ namespace SmartX.Api.Services
         private long _lastPush;
         private bool _changed;
 
-        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules, IHubContext<StreamHub> hub, ILogger<StreamProcessor> logger, StreamSettings settings)
+        public StreamProcessor(PacketQueue<StreamPacket> queue, DeviceCache cache, SensorStore sensors, AlertQueue<StreamAlert> alerts, StreamStats stats, HistoryLog<HistoryPoint> history, ActiveFaults faults, AlertRules rules, IHubContext<StreamHub> hub, ILogger<StreamProcessor> logger, StreamSettings settings, InsightService insights)
         {
+            _insights = insights;
             _settings = settings;
             _hub = hub;
             _logger = logger;
@@ -64,6 +66,7 @@ namespace SmartX.Api.Services
                 if (_alerts.TryDequeue(out var alert) && alert != null)
                 {
                     _stats.RecordAlert(_queue.Count);
+                    _insights.RecordAlert(alert.Rule);
                     Process(alert.Packet);
                     continue;
                 }

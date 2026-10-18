@@ -20,9 +20,11 @@ namespace SmartX.Api.Services
         private readonly CommandHistory<PumpCommand> _history;
         private readonly SensorStore _sensors;
         private readonly PendingCommands _pending;
+        private readonly InsightService _insights;
 
-        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, SensorStore sensors, PendingCommands pending)
+        public CommandService(TelemetryStore telemetry, DeviceCache cache, PacketQueue<StreamPacket> queue, CommandHistory<PumpCommand> history, SensorStore sensors, PendingCommands pending, InsightService insights)
         {
+            _insights = insights;
             _sensors = sensors;
             _pending = pending;
             _telemetry = telemetry;
@@ -50,6 +52,8 @@ namespace SmartX.Api.Services
                     new ValveChange { MacAddress = macAddress, Open = open, PreviousOpen = previous }
                 }
             });
+
+            _insights.RecordCommand(macAddress, open);
         }
 
         //..............................................................................//
@@ -89,6 +93,8 @@ namespace SmartX.Api.Services
                 Changes = changes
             });
 
+            _insights.RecordShutAll();
+
             return changes.Count;
         }
 
@@ -106,6 +112,8 @@ namespace SmartX.Api.Services
             {
                 Apply(change.MacAddress, change.PreviousOpen);
             }
+
+            _insights.RecordUndo();
 
             return true;
         }

@@ -33,7 +33,7 @@ namespace SmartX.Tests
             var queue = new PacketQueue<StreamPacket>();
             var history = new CommandHistory<PumpCommand>();
             var sensors = new SensorStore();
-            var service = new CommandService(new TelemetryStore(), cache, queue, history, sensors, new PendingCommands());
+            var service = new CommandService(new TelemetryStore(), cache, queue, history, sensors, new PendingCommands(), new InsightService(sensors, new ActiveFaults()));
             return (service, cache, queue, history, sensors);
         }
 

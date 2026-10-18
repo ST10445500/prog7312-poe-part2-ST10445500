@@ -36,6 +36,7 @@ builder.Services.AddSingleton<StreamStats>();
 builder.Services.AddSingleton<DeviceCache>();
 builder.Services.AddSingleton<CommandHistory<PumpCommand>>();
 builder.Services.AddSingleton<PendingCommands>();
+builder.Services.AddSingleton<InsightService>();
 builder.Services.AddSingleton<CommandService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<StreamProcessor>();
