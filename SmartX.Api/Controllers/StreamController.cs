@@ -126,7 +126,10 @@ namespace SmartX.Api.Controllers
         //copies each device with its active faults and whether it has gone quiet
         private List<DeviceState> Describe(List<DeviceState> devices)
         {
-            var faults = _faults.GetErrors();
+            // Grouped once by mac, so each device looks its codes up and does not walk every active fault.
+            var faults = _faults.GetErrors()
+                .GroupBy(fault => fault.Mac)
+                .ToDictionary(group => group.Key, group => group.Select(fault => fault.Code).ToList());
             var quiet = _faults.GetDisconnected().ToHashSet();
 
             // The cache hands out the objects it stores, so these are copies and the cache is left alone.
@@ -140,10 +143,7 @@ namespace SmartX.Api.Controllers
                     State = device.State,
                     LastSeen = device.LastSeen,
                     Radio = device.Radio,
-                    Faults = faults
-                        .Where(fault => fault.Mac == device.MacAddress)
-                        .Select(fault => fault.Code)
-                        .ToList(),
+                    Faults = faults.TryGetValue(device.MacAddress, out var codes) ? codes : new List<string>(),
                     Disconnected = quiet.Contains(device.MacAddress)
                 })
                 .ToList();
