@@ -12,7 +12,14 @@
 @if (_loadFailed)
 {
     <div class="alert alert-danger">
-        Cannot reach the gateway. What is shown may be out of date.
+        @if (_snapshot != null)
+        {
+            <span>Cannot reach the gateway. Showing what it last sent at @_snapshot.TakenAt.ToLocalTime().ToString("HH:mm:ss"). Overrides are off until it is back.</span>
+        }
+        else
+        {
+            <span>Cannot reach the gateway. Nothing has loaded yet.</span>
+        }
     </div>
 }
 
@@ -101,13 +108,17 @@ else if (_snapshot != null)
                     Label="Undo last override"
                     BusyLabel="Undoing..."
                     Busy="_isSending"
+                    Disabled="_loadFailed"
                     OnClick="UndoAsync" />
         <BusyButton CssClass="btn btn-outline-danger btn-sm ms-2"
                     Label="Shut all valves"
                     BusyLabel="Closing..."
                     Busy="_isSending"
+                    Disabled="_loadFailed"
                     OnClick="ShutAllAsync" />
     </div>
+
+    <SuggestionsPanel Suggestions="_suggestions" Failed="_suggestionsFailed" Disabled="_loadFailed || _isSending" OnApply="ApplySuggestionAsync" />
 
     <UndoPanel Commands="_commands" Failed="_commandsFailed" />
 
@@ -162,9 +173,9 @@ else if (_snapshot != null)
                                         @onclick="() => ShowHistoryAsync(device.MacAddress)">History</button>
                                 @if (device.Category == SensorCategory.Actuator)
                                 {
-                                    <button type="button" class="btn btn-sm btn-primary" disabled="@_isSending"
+                                    <button type="button" class="btn btn-sm btn-primary" disabled="@(_isSending || _loadFailed)"
                                             @onclick="() => SendAsync(device.MacAddress, true)">Open</button>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_isSending"
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(_isSending || _loadFailed)"
                                             @onclick="() => SendAsync(device.MacAddress, false)">Close</button>
                                 }
                             </td>
@@ -242,6 +253,9 @@ else if (_snapshot != null)
 @code {
     private const int DefaultPollMilliseconds = 1000;
     private const int LowestPollMilliseconds = 250;
+
+    // How long a call may take before the page counts the api as unreachable. Hard coded for now.
+    private const int RequestTimeoutMilliseconds = 5000;
     private const int HistoryRows = 15;
 
     // Minutes back from now, where 0 means everything the log kept.
@@ -264,6 +278,9 @@ else if (_snapshot != null)
 
     private List<CommandSummary>? _commands;
     private bool _commandsFailed;
+
+    private List<Suggestion>? _suggestions;
+    private bool _suggestionsFailed;
 
     private string? _historyMac;
     private List<HistoryPoint>? _history;
@@ -306,12 +323,20 @@ else if (_snapshot != null)
         {
             while (await timer.WaitForNextTickAsync(token))
             {
-                if (!State.Connected)
+                try
                 {
-                    await State.StartAsync();
-                }
+                    if (!State.Connected)
+                    {
+                        await State.StartAsync();
+                    }
 
-                await ReloadAsync();
+                    await ReloadAsync();
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Whatever went wrong, the loop carries on or the page would stay stale for good.
+                    Console.WriteLine($"The stream refresh failed: {ex.GetType().Name}: {ex.Message}");
+                }
             }
         }
         catch (OperationCanceledException)
@@ -319,13 +344,35 @@ else if (_snapshot != null)
         }
     }
 
+    // Every read gets the same short timeout, so a hung api shows as failed in seconds and not after a minute and a half.
+    private async Task<T?> GetAsync<T>(string url)
+    {
+        using var timeout = new CancellationTokenSource(RequestTimeoutMilliseconds);
+
+        return await Http.GetFromJsonAsync<T>(url, ApiJsonOptions.Default, timeout.Token);
+    }
+
+    // The page never passes its own token to these calls, so a cancelled one here is the timeout.
+    private static bool IsRequestFailure(Exception ex)
+    {
+        return ex is HttpRequestException or System.Text.Json.JsonException or TaskCanceledException;
+    }
+
     // Loads the list again, and the open history with it, then redraws.
     private async Task ReloadAsync()
     {
         await LoadSnapshotAsync();
 
+        // If the api would not answer for the snapshot it will not for the rest, so show that now instead of waiting on two more timeouts.
+        if (_loadFailed)
+        {
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         // Asked for every time, since an undo and a new override between two polls leave the depth the same.
         await LoadCommandsAsync();
+        await LoadSuggestionsAsync();
 
         if (_historyMac != null)
         {
@@ -339,13 +386,37 @@ else if (_snapshot != null)
     {
         try
         {
-            _commands = await Http.GetFromJsonAsync<List<CommandSummary>>("api/commands/history", ApiJsonOptions.Default);
+            _commands = await GetAsync<List<CommandSummary>>("api/commands/history");
             _commandsFailed = false;
         }
-        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (IsRequestFailure(ex))
         {
             _commandsFailed = true;
         }
+    }
+
+    private async Task LoadSuggestionsAsync()
+    {
+        try
+        {
+            _suggestions = await GetAsync<List<Suggestion>>("api/insights");
+            _suggestionsFailed = false;
+        }
+        catch (Exception ex) when (IsRequestFailure(ex))
+        {
+            _suggestionsFailed = true;
+        }
+    }
+
+    // A suggestion goes out as an ordinary override, so the message, the undo stack and the engine all see it the usual way.
+    private async Task ApplySuggestionAsync(Suggestion suggestion)
+    {
+        if (suggestion.MacAddress == null || suggestion.Open == null)
+        {
+            return;
+        }
+
+        await SendAsync(suggestion.MacAddress, suggestion.Open.Value);
     }
 
     private async Task ShowHistoryAsync(string macAddress)
@@ -380,7 +451,7 @@ else if (_snapshot != null)
                 url += $"?from={Uri.EscapeDataString(from)}";
             }
 
-            var points = await Http.GetFromJsonAsync<List<HistoryPoint>>(url, ApiJsonOptions.Default);
+            var points = await GetAsync<List<HistoryPoint>>(url);
 
             // The card may have been closed, switched or given another range while the call was out.
             if (mac != _historyMac || minutes != State.HistoryMinutes)
@@ -391,7 +462,7 @@ else if (_snapshot != null)
             _history = points ?? new List<HistoryPoint>();
             _historyFailed = false;
         }
-        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (IsRequestFailure(ex))
         {
             _historyFailed = true;
         }
@@ -419,10 +490,10 @@ else if (_snapshot != null)
                 url += $"&category={State.Category}";
             }
 
-            _snapshot = await Http.GetFromJsonAsync<StreamSnapshot>(url, ApiJsonOptions.Default);
+            _snapshot = await GetAsync<StreamSnapshot>(url);
             _loadFailed = false;
         }
-        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (IsRequestFailure(ex))
         {
             _loadFailed = true;
         }
@@ -432,37 +503,43 @@ else if (_snapshot != null)
     {
         var request = new PumpCommandRequest { MacAddress = macAddress, Open = open };
 
-        await PostCommandAsync(() => Http.PostAsJsonAsync("api/commands", request, ApiJsonOptions.Default));
+        await PostCommandAsync(token => Http.PostAsJsonAsync("api/commands", request, ApiJsonOptions.Default, token));
     }
 
     private async Task ShutAllAsync()
     {
-        await PostCommandAsync(() => Http.PostAsync("api/commands/close-all", null));
+        await PostCommandAsync(token => Http.PostAsync("api/commands/close-all", null, token));
     }
 
     private async Task UndoAsync()
     {
-        await PostCommandAsync(() => Http.PostAsync("api/commands/undo", null));
+        await PostCommandAsync(token => Http.PostAsync("api/commands/undo", null, token));
     }
 
-    private async Task PostCommandAsync(Func<Task<HttpResponseMessage>> post)
+    private async Task PostCommandAsync(Func<CancellationToken, Task<HttpResponseMessage>> post)
     {
         _isSending = true;
         _commandFailed = false;
 
+        using var timeout = new CancellationTokenSource(RequestTimeoutMilliseconds);
+
         try
         {
-            var response = await post();
+            var response = await post(timeout.Token);
 
             _commandMessage = await response.Content.ReadAsStringAsync();
             _commandFailed = !response.IsSuccessStatusCode;
 
             await LoadSnapshotAsync();
             await LoadCommandsAsync();
+            await LoadSuggestionsAsync();
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (IsRequestFailure(ex))
         {
-            _commandMessage = "Could not reach the gateway API.";
+            // A call that timed out may still have reached the api, so it is not said to have failed outright.
+            _commandMessage = ex is TaskCanceledException
+                ? "The gateway did not answer in time. The override may still have gone through, check before sending it again."
+                : "Could not reach the gateway API.";
             _commandFailed = true;
         }
         finally

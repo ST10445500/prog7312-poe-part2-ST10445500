@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using SmartX.Shared.Models;
 
@@ -13,7 +14,14 @@ namespace SmartX.Web.Services
     //keeps what the command stream page needs to remember between visits, and the live connection to the api
     public class DashboardState : IAsyncDisposable
     {
+        // How long the box has to sit still before the search counts as settled. Hard coded for now.
+        private const int SearchSettleMilliseconds = 1500;
+
         private readonly HubConnection _hub;
+        private readonly HttpClient _http;
+
+        private CancellationTokenSource? _searchDelay;
+        private string _lastPostedSearch = string.Empty;
 
         private string _searchText = string.Empty;
         private SensorCategory? _category;
@@ -22,6 +30,8 @@ namespace SmartX.Web.Services
 
         public DashboardState(HttpClient http)
         {
+            _http = http;
+
             // The hub sits on the same api the page already talks to.
             var hubUrl = new Uri(http.BaseAddress!, "hubs/stream");
 
@@ -66,6 +76,48 @@ namespace SmartX.Web.Services
 
                 _searchText = value;
                 OnChange?.Invoke();
+
+                _ = PostWhenSettledAsync(value);
+            }
+        }
+
+        //..............................................................................//
+
+        //waits for the search box to stop changing, then tells the api what was searched for
+        private async Task PostWhenSettledAsync(string text)
+        {
+            // Typing again cancels the wait, so only the text that was left alone gets posted.
+            _searchDelay?.Cancel();
+            _searchDelay?.Dispose();
+
+            var delay = new CancellationTokenSource();
+            _searchDelay = delay;
+
+            try
+            {
+                await Task.Delay(SearchSettleMilliseconds, delay.Token);
+
+                var settled = text.Trim();
+
+                if (settled.Length == 0 || settled == _lastPostedSearch)
+                {
+                    return;
+                }
+
+                var response = await _http.PostAsJsonAsync("api/insights/search", new SearchRecord { Text = settled }, ApiJsonOptions.Default, delay.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _lastPostedSearch = settled;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (HttpRequestException ex)
+            {
+                // The engine only misses one search, the page carries on.
+                Console.WriteLine($"Could not record the search: {ex.Message}");
             }
         }
 
@@ -137,10 +189,11 @@ namespace SmartX.Web.Services
             {
                 await _hub.StartAsync();
             }
-            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // The api is down or the origin was refused. The page keeps polling and the next visit tries again.
-                Console.WriteLine($"Could not open the stream connection: {ex.Message}");
+                // Broad on purpose, what a failed connect throws depends on the transport it fell back to.
+                // The api is down or the origin was refused. The page keeps polling and tries again every tick.
+                Console.WriteLine($"Could not open the stream connection: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -148,6 +201,9 @@ namespace SmartX.Web.Services
 
         public async ValueTask DisposeAsync()
         {
+            _searchDelay?.Cancel();
+            _searchDelay?.Dispose();
+
             await _hub.DisposeAsync();
         }
     }
