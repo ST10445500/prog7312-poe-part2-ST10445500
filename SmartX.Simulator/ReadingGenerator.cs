@@ -35,7 +35,30 @@ namespace SmartX.Simulator
         // Same idea, against the gateway's fifty watts.
         private const double WattSpikeJump = 90;
 
+        //how long each profile's pattern takes to repeat, counted in readings
+        private const int ThirstyCycle = 90;
+        private const int SurgeCycle = 100;
+        private const int WeakCycle = 120;
+        private const int FlakyCycle = 40;
+        private const int FaultCycle = 80;
+
+        //how long a quiet device stays quiet, and how often, in seconds
+        private const int QuietCycleSeconds = 120;
+        private const int QuietStartSeconds = 40;
+        private const int QuietLengthSeconds = 30;
+
+        // Well over the gateway's six hundred watts.
+        private const double WattSurgeTarget = 680;
+
+        //the fault codes a faulty valve takes turns reporting
+        private static readonly string[] FaultCodes = ["StuckValve", "LowBattery", "SensorDrift"];
+
         private readonly SensorCategory _category;
+        private readonly DeviceProfile _profile;
+
+        // Where this device is in its pattern. Different per device so they do not all misbehave together.
+        private readonly int _phaseOffset;
+        private int _tick;
 
         // A task per sensor means a shared Random would be drawn from at once.
         private readonly Random _random;
@@ -53,13 +76,20 @@ namespace SmartX.Simulator
         private bool _justCommanded;
 
         public ReadingGenerator(SensorCategory category, int seed)
+            : this(category, seed, DeviceProfile.Healthy)
+        {
+        }
+
+        public ReadingGenerator(SensorCategory category, int seed, DeviceProfile profile)
         {
             _category = category;
+            _profile = profile;
             _random = new Random(seed);
 
             _baseRssi = -50 - _random.Next(36);
             _hopCount = 1 + _random.Next(3);
             _protocol = Protocols[seed % Protocols.Length];
+            _phaseOffset = _random.Next(1000);
 
             _value = category == SensorCategory.PowerConsumption
                 ? (MinWatts + MaxWatts) / 2
@@ -80,16 +110,16 @@ namespace SmartX.Simulator
         //produces the next reading this sensor would report at the given time
         public DeviceReading Next(string macAddress, DateTime recordedAt)
         {
+            _tick++;
+
             var reading = new DeviceReading
             {
                 MacAddress = macAddress,
                 RecordedAt = recordedAt,
-                Rssi = _baseRssi + _random.Next(-3, 4),
-                HopCount = _hopCount,
-                DutyCycle = Math.Round(_random.NextDouble() * 4, 1),
-                PacketLoss = Math.Round(_random.NextDouble() * 3, 1),
                 Protocol = _protocol
             };
+
+            ApplyRadio(reading);
 
             switch (_category)
             {
@@ -103,6 +133,7 @@ namespace SmartX.Simulator
 
                 case SensorCategory.Actuator:
                     reading.State = NextState();
+                    reading.Fault = NextFault();
                     break;
             }
 
@@ -111,10 +142,128 @@ namespace SmartX.Simulator
 
         //..............................................................................//
 
+        //checks whether this device is in its quiet spell, given how many seconds the run has been going
+        public bool IsQuietAt(double secondsRunning)
+        {
+            if (_profile != DeviceProfile.Intermittent)
+            {
+                return false;
+            }
+
+            var position = (secondsRunning + _phaseOffset) % QuietCycleSeconds;
+            return position >= QuietStartSeconds && position < QuietStartSeconds + QuietLengthSeconds;
+        }
+
+        //..............................................................................//
+
+        //works out where this device is in a pattern that repeats every so many readings
+        private int Phase(int cycle)
+        {
+            return (_tick + _phaseOffset) % cycle;
+        }
+
+        //..............................................................................//
+
+        //fills in the radio fields, which the weak and flaky devices bend out of shape
+        private void ApplyRadio(DeviceReading reading)
+        {
+            var rssi = _baseRssi + _random.Next(-3, 4);
+            var hops = _hopCount;
+            var duty = _random.NextDouble() * 4;
+            var loss = _random.NextDouble() * 3;
+
+            if (_profile == DeviceProfile.WeakRadio)
+            {
+                // Depth is how far into the fade the device is, 0 at rest and 1 at the bottom.
+                var depth = WeakDepth();
+
+                rssi = -72 - (int)(depth * 24) + _random.Next(-2, 3);
+                hops = depth > 0.5 ? 4 : 3;
+                duty += depth * 6;
+                loss += depth * 9;
+            }
+            else if (_profile == DeviceProfile.Flaky)
+            {
+                var burst = Phase(FlakyCycle);
+
+                if (burst >= 10 && burst < 20)
+                {
+                    rssi += _random.Next(-12, 1);
+                    duty = 8 + (_random.NextDouble() * 7);
+                    loss = 8 + (_random.NextDouble() * 17);
+                }
+            }
+
+            reading.Rssi = rssi;
+            reading.HopCount = hops;
+            reading.DutyCycle = Math.Round(duty, 1);
+            reading.PacketLoss = Math.Round(loss, 1);
+        }
+
+        //..............................................................................//
+
+        //works out how faded a weak radio is, from nothing up to the bottom and back
+        private double WeakDepth()
+        {
+            var position = Phase(WeakCycle);
+
+            if (position >= 30 && position < 60)
+            {
+                return (position - 30) / 30.0;
+            }
+
+            if (position >= 60 && position < 80)
+            {
+                return 1;
+            }
+
+            if (position >= 80 && position < 100)
+            {
+                return 1 - ((position - 80) / 20.0);
+            }
+
+            return 0;
+        }
+
+        //..............................................................................//
+
+        //gives the fault code a faulty valve is reporting right now, or null when it is well
+        private string? NextFault()
+        {
+            if (_profile != DeviceProfile.FaultyValve)
+            {
+                return null;
+            }
+
+            var position = Phase(FaultCycle);
+
+            if (position < 20 || position >= 40)
+            {
+                return null;
+            }
+
+            // A different code each time round, so the faults do not all look the same.
+            return FaultCodes[((_tick + _phaseOffset) / FaultCycle) % FaultCodes.Length];
+        }
+
+        //..............................................................................//
+
         //produces the next soil moisture percentage
         private double NextMoisture()
         {
-            if (IsSpike())
+            var drying = Phase(ThirstyCycle);
+
+            if (_profile == DeviceProfile.Thirsty && drying >= 15 && drying < 45)
+            {
+                // Dries steadily to well under the gateway's fifteen percent.
+                _value -= 1.4 + Wobble(0.4);
+            }
+            else if (_profile == DeviceProfile.Thirsty && drying >= 45 && drying < 55)
+            {
+                // Watered. Climbs back to the top of the band.
+                _value = Math.Min(_value + 5, MaxMoisture);
+            }
+            else if (IsSpike())
             {
                 _value -= MoistureSpikeDrop;
             }
@@ -134,7 +283,14 @@ namespace SmartX.Simulator
         //produces the next wattage
         private double NextWatts()
         {
-            if (IsSpike())
+            var surging = Phase(SurgeCycle);
+
+            if (_profile == DeviceProfile.Surging && surging >= 20 && surging < 46)
+            {
+                // Closes half the gap to the target each reading, so it climbs fast and then hovers.
+                _value += ((WattSurgeTarget - _value) * 0.5) + Wobble(15);
+            }
+            else if (IsSpike())
             {
                 _value += WattSpikeJump;
             }

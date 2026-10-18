@@ -39,6 +39,23 @@ namespace SmartX.Simulator
 
         //..............................................................................//
 
+        //registers one sensor with the gateway, false if it already knew the mac address
+        public async Task<bool> RegisterAsync(SensorRegistration sensor)
+        {
+            var response = await _http.PostAsJsonAsync("api/sensors", sensor, JsonOptions);
+
+            // A second run finds them already there, which is fine.
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return false;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return true;
+        }
+
+        //..............................................................................//
+
         //posts a batch of readings and reports what the gateway kept
         public async Task<BatchResult> PostBatchAsync(List<DeviceReading> readings)
         {

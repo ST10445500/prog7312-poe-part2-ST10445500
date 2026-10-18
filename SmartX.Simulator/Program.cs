@@ -36,6 +36,13 @@ const double CriticalAfterSeconds = 5;
 const int CriticalBurstReadings = 300;
 const double CriticalMoisture = 5;
 
+// Left to itself the simulator floods the gateway this often, so a queue that backs up is seen without a flag.
+const double BurstEverySeconds = 75;
+
+// About one live reading in this many is sent a second time, late or with the same timestamp. Not valves, a stale state would undo a command.
+const int RepeatOdds = 20;
+const double LateBySeconds = 8;
+
 var baseUrl = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal) ? args[0] : DefaultBaseUrl;
 var faultMac = ReadFlag("--fault");
 var dropMac = ReadFlag("--drop");
@@ -49,6 +56,18 @@ List<SensorRegistration> fleet;
 
 try
 {
+	// The gateway only seeds nine, so the rest of the facility is registered from here.
+	var added = 0;
+
+	foreach (var extra in ExtraFleet.Build())
+	{
+		if (await gateway.RegisterAsync(extra))
+		{
+			added++;
+		}
+	}
+
+	Console.WriteLine($"Registered {added} extra sensors.");
 	fleet = await gateway.GetFleetAsync();
 }
 catch (HttpRequestException problem)
@@ -73,10 +92,16 @@ Console.WriteLine($"Reporting for {reporting.Count} of {fleet.Count} registered 
 
 // One generator per sensor, seeded differently so the fleet does not move in step.
 var generators = new Dictionary<string, ReadingGenerator>();
+var perCategory = new Dictionary<SensorCategory, int>();
 
 for (var index = 0; index < reporting.Count; index++)
 {
-	generators[reporting[index].MacAddress] = new ReadingGenerator(reporting[index].Category, index + 1);
+	// The nth device of a kind gets the nth profile for that kind, so each fleet misbehaves the same way every run.
+	var category = reporting[index].Category;
+	perCategory.TryGetValue(category, out var position);
+	perCategory[category] = position + 1;
+
+	generators[reporting[index].MacAddress] = new ReadingGenerator(category, index + 1, DeviceProfiles.For(category, position));
 }
 
 Console.WriteLine($"Backfilling {BackfillReadings} readings per sensor...");
@@ -94,9 +119,20 @@ foreach (var sensor in reporting)
 	for (var index = 0; index < BackfillReadings; index++)
 	{
 		var recordedAt = backfillStart.AddSeconds(index * BackfillIntervalSeconds);
-		batch.Add(generator.Next(sensor.MacAddress, recordedAt));
+
+		// A quiet device leaves a hole in its history instead of a reading.
+		if (!generator.IsQuietAt(index * BackfillIntervalSeconds))
+		{
+			batch.Add(generator.Next(sensor.MacAddress, recordedAt));
+		}
 
 		if (batch.Count < GatewayClient.MaxBatchSize && index < BackfillReadings - 1)
+		{
+			continue;
+		}
+
+		// The last window can land in a quiet spell with nothing in it.
+		if (batch.Count == 0)
 		{
 			continue;
 		}
@@ -145,6 +181,8 @@ if (criticalMac != null)
 	streams.Add(SendCriticalAsync(criticalMac, stopping.Token));
 }
 
+streams.Add(SendScheduledBurstsAsync(stopping.Token));
+
 await Task.WhenAll(streams);
 
 Console.WriteLine("Simulator stopped.");
@@ -173,31 +211,7 @@ async Task SendCriticalAsync(string macAddress, CancellationToken token)
 	{
 		await Task.Delay(TimeSpan.FromSeconds(CriticalAfterSeconds), token);
 
-		// Fresh generators, because the streaming tasks are still using the shared ones.
-		var others = reporting.Where(sensor => sensor != target).ToList();
-		var burstGenerators = others
-			.Select((sensor, index) => new ReadingGenerator(sensor.Category, 1000 + index))
-			.ToList();
-
-		var burst = new List<Task>();
-
-		for (var index = 0; index < CriticalBurstReadings; index++)
-		{
-			var position = index % others.Count;
-			var reading = burstGenerators[position].Next(others[position].MacAddress, DateTime.UtcNow);
-			burst.Add(gateway.PostReadingAsync(reading, token));
-		}
-
-		await Task.WhenAll(burst);
-
-		await gateway.PostReadingAsync(new DeviceReading
-		{
-			MacAddress = target.MacAddress,
-			Value = CriticalMoisture,
-			RecordedAt = DateTime.UtcNow,
-			Rssi = -60
-		}, token);
-
+		await SendBurstAndDryReadingAsync(target, token);
 		Console.WriteLine($"Sent {CriticalBurstReadings} readings and then a moisture of {CriticalMoisture}% from {target.MacAddress}.");
 	}
 	catch (OperationCanceledException)
@@ -212,15 +226,90 @@ async Task SendCriticalAsync(string macAddress, CancellationToken token)
 
 //..............................................................................//
 
+//floods the gateway with ordinary readings and then sends one dry reading from the target
+async Task SendBurstAndDryReadingAsync(SensorRegistration target, CancellationToken token)
+{
+	// Fresh generators, because the streaming tasks are still using the shared ones.
+	var others = reporting.Where(sensor => sensor != target).ToList();
+	var burstGenerators = others
+		.Select((sensor, index) => new ReadingGenerator(sensor.Category, 1000 + index))
+		.ToList();
+
+	var burst = new List<Task>();
+
+	for (var index = 0; index < CriticalBurstReadings; index++)
+	{
+		var position = index % others.Count;
+		var reading = burstGenerators[position].Next(others[position].MacAddress, DateTime.UtcNow);
+		burst.Add(gateway.PostReadingAsync(reading, token));
+	}
+
+	await Task.WhenAll(burst);
+
+	await gateway.PostReadingAsync(new DeviceReading
+	{
+		MacAddress = target.MacAddress,
+		Value = CriticalMoisture,
+		RecordedAt = DateTime.UtcNow,
+		Rssi = -60
+	}, token);
+}
+
+//..............................................................................//
+
+//repeats the flood and a dry reading on its own, one moisture sensor after another, so the alert jumping the queue is not a one-off
+async Task SendScheduledBurstsAsync(CancellationToken token)
+{
+	var sensors = reporting.Where(sensor => sensor.Category == SensorCategory.Environmental).ToList();
+
+	if (sensors.Count == 0)
+	{
+		return;
+	}
+
+	var next = 0;
+
+	try
+	{
+		while (!token.IsCancellationRequested)
+		{
+			await Task.Delay(TimeSpan.FromSeconds(BurstEverySeconds), token);
+
+			var target = sensors[next % sensors.Count];
+			next++;
+
+			await SendBurstAndDryReadingAsync(target, token);
+			Console.WriteLine($"  Burst of {CriticalBurstReadings} readings, then a dry reading from {target.MacAddress}.");
+		}
+	}
+	catch (OperationCanceledException)
+	{
+		return;
+	}
+	catch (HttpRequestException problem)
+	{
+		Console.WriteLine($"  Scheduled burst could not post: {problem.Message}");
+	}
+}
+
+//..............................................................................//
+
 //checks whether this sensor is inside its quiet spell
 bool IsDropped(string macAddress)
 {
+	var running = (DateTime.UtcNow - startedAt).TotalSeconds;
+
+	// A device whose profile is to wander off does so with or without the flag.
+	if (generators[macAddress].IsQuietAt(running))
+	{
+		return true;
+	}
+
 	if (!string.Equals(macAddress, dropMac, StringComparison.OrdinalIgnoreCase))
 	{
 		return false;
 	}
 
-	var running = (DateTime.UtcNow - startedAt).TotalSeconds;
 	return running >= DropAfterSeconds && running < DropAfterSeconds + DropForSeconds;
 }
 
@@ -273,6 +362,26 @@ async Task StreamSensorAsync(SensorRegistration sensor, CancellationToken token)
 			}
 
 			await gateway.PostReadingAsync(reading, token);
+
+			// Radios drop and retry, so the same reading sometimes turns up again, or turns up late.
+			if (sensor.Category != SensorCategory.Actuator && jitter.Next(RepeatOdds) == 0)
+			{
+				var again = new DeviceReading
+				{
+					MacAddress = reading.MacAddress,
+					Value = reading.Value,
+					State = reading.State,
+					RecordedAt = jitter.Next(2) == 0 ? reading.RecordedAt : reading.RecordedAt?.AddSeconds(-LateBySeconds),
+					Rssi = reading.Rssi,
+					HopCount = reading.HopCount,
+					DutyCycle = reading.DutyCycle,
+					PacketLoss = reading.PacketLoss,
+					Protocol = reading.Protocol,
+					Fault = reading.Fault
+				};
+
+				await gateway.PostReadingAsync(again, token);
+			}
 		}
 		catch (OperationCanceledException)
 		{
