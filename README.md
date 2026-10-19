@@ -102,8 +102,30 @@ The solution file is `SmartX.slnx`, the newer XML solution format, not a `.sln`.
 
 ## Running the App
 
-There are two ways to run it. Docker is the fewest steps, and `dotnet run` is the
-better one if you want to put a breakpoint in the API.
+The main way to run it is Visual Studio, which starts everything with one key. Docker
+is the alternative if you would rather not install anything, and plain `dotnet run`
+is there as a fallback.
+
+### With Visual Studio
+
+Open `SmartX.slnx` and pick the **App & Web** launch profile, then press F5. That
+starts the API, the dashboard and the simulator together, and Shift+F5 stops all
+three. The first time the API is served over https on a machine, the ASP.NET
+development certificate has to be trusted:
+
+```bash
+dotnet dev-certs https --trust
+```
+
+| URL | What it is |
+|---|---|
+| `https://localhost:7267` | The dashboard. Open this one. |
+| `https://localhost:7002` | The gateway API |
+| `https://localhost:7002/openapi/v1.json` | The OpenAPI document |
+
+The gateway starts with a small demo facility already registered, so the fleet is
+never empty. **Readings only start arriving once the simulator is running**, so the
+dashboards stay quiet until it is started.
 
 ### With Docker
 
@@ -127,15 +149,8 @@ first call, so give the dashboard about twenty seconds to fill up.
 
 ### With dotnet run
 
-The first time the API is served over https on a machine, the ASP.NET development
-certificate has to be trusted. This is only needed for this route, not the Docker
-one:
-
-```bash
-dotnet dev-certs https --trust
-```
-
-Then three terminals, from the repository root:
+This needs the same trusted development certificate as Visual Studio. Then three
+terminals, from the repository root:
 
 ```bash
 dotnet run --project SmartX.Api          # terminal 1, the gateway
@@ -143,19 +158,7 @@ dotnet run --project SmartX.Web          # terminal 2, the dashboard
 dotnet run --project SmartX.Simulator    # terminal 3, the devices
 ```
 
-| URL | What it is |
-|---|---|
-| `https://localhost:7267` | The dashboard. Open this one. |
-| `https://localhost:7002` | The gateway API |
-| `https://localhost:7002/openapi/v1.json` | The OpenAPI document |
-
-Or open `SmartX.slnx` in Visual Studio and pick the **App & Web** launch profile,
-which starts all three together. On Windows there is also `start.ps1`, which starts
-all three in order and opens the browser, and `stop.ps1` to shut them down again.
-
-The gateway starts with a small demo facility already registered, so the fleet is
-never empty. **Readings only start arriving once the simulator is running**, so the
-dashboards stay quiet until it is started.
+The URLs are the same as the Visual Studio ones above.
 
 ### What the simulator does
 
@@ -527,7 +530,6 @@ SmartX/
   SmartX.slnx                 Solution file, XML format
   SmartX.slnLaunch            Visual Studio multi-project launch profile
   docker-compose.yml
-  start.ps1, stop.ps1         Start and stop the whole app on Windows
 
   SmartX.Api/                 The gateway
     Collections/              RingBuffer, TelemetryBatches, SensorTelemetry,
