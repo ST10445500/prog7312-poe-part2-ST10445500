@@ -378,6 +378,7 @@ else if (_snapshot != null)
         State.AlertsOnly = false;
     }
 
+    // Reads the poll setting, loads the first snapshot, then starts the poll and the hub.
     protected override async Task OnInitializedAsync()
     {
         // A missing, non-numeric or tiny setting falls back, so a typo cannot hammer the api.
@@ -467,6 +468,7 @@ else if (_snapshot != null)
         await InvokeAsync(StateHasChanged);
     }
 
+    // Fetches the override list for the undo panel, flagging it as failed if the api does not answer.
     private async Task LoadCommandsAsync()
     {
         try
@@ -480,6 +482,7 @@ else if (_snapshot != null)
         }
     }
 
+    // Fetches what the engine suggests, with its own failed flag so the panel can say so.
     private async Task LoadSuggestionsAsync()
     {
         try
@@ -519,6 +522,7 @@ else if (_snapshot != null)
         }
     }
 
+    // Opens the history card for a device, or closes it if that device is already the open one.
     private async Task ShowHistoryAsync(string macAddress)
     {
         // A second click on the open device hides it.
@@ -586,12 +590,14 @@ else if (_snapshot != null)
         }
     }
 
+    // Hides the history card and drops its readings.
     private void CloseHistory()
     {
         _historyMac = null;
         _history = null;
     }
 
+    // Fetches the open device's readings for the chosen range and keeps them only if the card is still the same one.
     private async Task LoadHistoryAsync()
     {
         var mac = _historyMac;
@@ -637,6 +643,7 @@ else if (_snapshot != null)
         State.HistoryMinutes = minutes;
     }
 
+    // Fetches the snapshot with the search, category and alerts only filters applied by the api.
     private async Task LoadSnapshotAsync()
     {
         try
@@ -657,6 +664,7 @@ else if (_snapshot != null)
         }
     }
 
+    // Opens or closes one valve.
     private async Task SendAsync(string macAddress, bool open)
     {
         var request = new PumpCommandRequest { MacAddress = macAddress, Open = open };
@@ -664,16 +672,19 @@ else if (_snapshot != null)
         await PostCommandAsync(token => Http.PostAsJsonAsync("api/commands", request, ApiJsonOptions.Default, token));
     }
 
+    // Closes every valve that is open, as one override.
     private async Task ShutAllAsync()
     {
         await PostCommandAsync(token => Http.PostAsync("api/commands/close-all", null, token));
     }
 
+    // Puts back whatever the newest override replaced.
     private async Task UndoAsync()
     {
         await PostCommandAsync(token => Http.PostAsync("api/commands/undo", null, token));
     }
 
+    // Runs any of the three override calls, shows what the api said, then reloads the page data.
     private async Task PostCommandAsync(Func<CancellationToken, Task<HttpResponseMessage>> post)
     {
         _isSending = true;
@@ -716,6 +727,7 @@ else if (_snapshot != null)
         _ = ReloadAsync();
     }
 
+    // Stops the poll and the timers and lets go of the state events when the page is left.
     public void Dispose()
     {
         State.OnChange -= OnStateChanged;
