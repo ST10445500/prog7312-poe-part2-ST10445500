@@ -4,15 +4,17 @@
     "Projects": [
       {
         "Path": "SmartX.Api\\SmartX.Api.csproj",
-        "Action": "Start"
+        "Action": "Start",
+        "DebugTarget": "https"
       },
       {
         "Path": "SmartX.Web\\SmartX.Web.csproj",
-        "Action": "StartWithoutDebugging"
+        "Action": "Start",
+        "DebugTarget": "https"
       },
       {
         "Path": "SmartX.Simulator\\SmartX.Simulator.csproj",
-        "Action": "StartWithoutDebugging"
+        "Action": "Start"
       }
     ]
   }

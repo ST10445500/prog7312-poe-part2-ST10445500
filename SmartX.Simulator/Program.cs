@@ -43,6 +43,9 @@ const double BurstEverySeconds = 75;
 const int RepeatOdds = 20;
 const double LateBySeconds = 8;
 
+// How long it keeps asking for the gateway before giving up, for when both are started together.
+const double GatewayWaitSeconds = 45;
+
 var baseUrl = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal) ? args[0] : DefaultBaseUrl;
 var faultMac = ReadFlag("--fault");
 var dropMac = ReadFlag("--drop");
@@ -54,28 +57,54 @@ Console.WriteLine($"Smart-X simulator, talking to {baseUrl}");
 
 List<SensorRegistration> fleet;
 
-try
-{
-	// The gateway only seeds nine, so the rest of the facility is registered from here.
-	var added = 0;
+// Started from Visual Studio next to the api, so the api may still be coming up. Only a refused connection is waited out.
+var giveUpAt = DateTime.UtcNow.AddSeconds(GatewayWaitSeconds);
+var waitingShown = false;
 
-	foreach (var extra in ExtraFleet.Build())
+while (true)
+{
+	try
 	{
-		if (await gateway.RegisterAsync(extra))
-		{
-			added++;
-		}
-	}
+		// The gateway only seeds nine, so the rest of the facility is registered from here.
+		var added = 0;
 
-	Console.WriteLine($"Registered {added} extra sensors.");
-	fleet = await gateway.GetFleetAsync();
-}
-catch (HttpRequestException problem)
-{
-	// Usually the api is not up, which the socket error does not say.
-	Console.WriteLine($"Could not reach the gateway at {baseUrl}. Is SmartX.Api running?");
-	Console.WriteLine(problem.Message);
-	return;
+		foreach (var extra in ExtraFleet.Build())
+		{
+			if (await gateway.RegisterAsync(extra))
+			{
+				added++;
+			}
+		}
+
+		Console.WriteLine($"Registered {added} extra sensors.");
+		fleet = await gateway.GetFleetAsync();
+		break;
+	}
+	catch (HttpRequestException problem) when (problem.InnerException is System.Security.Authentication.AuthenticationException)
+	{
+		// The api is up but the secure connection failed, nearly always the dev certificate, which looks the same as it being down.
+		Console.WriteLine($"Reached {baseUrl} but could not set up a secure connection. The https development certificate is usually not trusted.");
+		Console.WriteLine("Run dotnet dev-certs https --trust and start the simulator again.");
+		Console.WriteLine(problem.Message);
+		return;
+	}
+	catch (HttpRequestException problem) when (problem.InnerException is System.Net.Sockets.SocketException && DateTime.UtcNow < giveUpAt)
+	{
+		if (!waitingShown)
+		{
+			Console.WriteLine("Waiting for the gateway to start...");
+			waitingShown = true;
+		}
+
+		await Task.Delay(TimeSpan.FromSeconds(2));
+	}
+	catch (HttpRequestException problem)
+	{
+		// Usually the api is not up, which the socket error does not say.
+		Console.WriteLine($"Could not reach the gateway at {baseUrl}. Is SmartX.Api running?");
+		Console.WriteLine(problem.Message);
+		return;
+	}
 }
 
 var reporting = fleet
