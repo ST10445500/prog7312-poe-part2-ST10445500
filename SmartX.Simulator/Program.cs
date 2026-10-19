@@ -39,6 +39,9 @@ const double CriticalMoisture = 5;
 // Left to itself the simulator floods the gateway this often, so a queue that backs up is seen without a flag.
 const double BurstEverySeconds = 75;
 
+// The first flood comes early so anyone watching a fresh run sees the queue back up without waiting a minute.
+const double FirstBurstAfterSeconds = 20;
+
 // About one live reading in this many is sent a second time, late or with the same timestamp. Not valves, a stale state would undo a command.
 const int RepeatOdds = 20;
 const double LateBySeconds = 8;
@@ -302,7 +305,7 @@ async Task SendScheduledBurstsAsync(CancellationToken token)
 	{
 		while (!token.IsCancellationRequested)
 		{
-			await Task.Delay(TimeSpan.FromSeconds(BurstEverySeconds), token);
+			await Task.Delay(TimeSpan.FromSeconds(next == 0 ? FirstBurstAfterSeconds : BurstEverySeconds), token);
 
 			var target = sensors[next % sensors.Count];
 			next++;
