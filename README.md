@@ -678,10 +678,11 @@ AI tools were used as support during the project, but I reviewed and adjusted th
 final implementation and testing myself.
 
 - **GitHub Copilot** was used to assist with the testing setup and to help define the
-  scope of the automated tests.
+  scope of the automated tests. As well as which tests to prioritise.
 - **ChatGPT** was used to assist with generating site style visuals and styling ideas
   for the dashboard and related frontend presentation.
 - **ChatGPT** was used to assist with the formatting and style visuals of the README
   document.
+- **ChatGPT** was used to assist with coming up with appropriate naming conventions for the custom data structures files and class names.
 
 ---
