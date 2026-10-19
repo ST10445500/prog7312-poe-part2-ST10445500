@@ -28,6 +28,9 @@ namespace SmartX.Shared.Models
         //how many repeats of an active fault were turned away instead of alerted
         public long SuppressedDuplicates { get; set; }
 
+        //how many repeats of a disconnect were turned away instead of noted again
+        public long SuppressedDisconnects { get; set; }
+
         //the devices that have gone quiet
         public List<string> DisconnectedNodes { get; set; } = new();
 

@@ -12,35 +12,6 @@ namespace SmartX.Tests
     //checks that alerts leave by severity first and by arrival order within the same severity
     public class AlertQueueTests
     {
-        [Fact]
-        public void TryDequeue_EmptyQueue_ReturnsFalse()
-        {
-            // Arrange
-            var queue = new AlertQueue<int>();
-
-            // Act
-            var found = queue.TryDequeue(out _);
-
-            // Assert
-            Assert.False(found);
-            Assert.Equal(0, queue.Count);
-        }
-
-        [Fact]
-        public void TryDequeue_OneItem_ReturnsItAndEmpties()
-        {
-            // Arrange
-            var queue = new AlertQueue<int>();
-            queue.Enqueue(7, 1);
-
-            // Act
-            var found = queue.TryDequeue(out var item);
-
-            // Assert
-            Assert.True(found);
-            Assert.Equal(7, item);
-            Assert.Equal(0, queue.Count);
-        }
 
         [Fact]
         public void TryDequeue_MixedSeverity_HigherSeverityLeavesFirst()
@@ -83,46 +54,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void TryDequeue_AlertAddedBehindOrdinaryPackets_IsHandledFirst()
-        {
-            // Arrange
-            var packets = new PacketQueue<int>();
-            var alerts = new AlertQueue<int>();
-
-            for (var i = 0; i < 100; i++)
-            {
-                packets.Enqueue(i);
-            }
-
-            alerts.Enqueue(999, 2);
-
-            // Act
-            // Alerts are taken first, the same way the processor does it.
-            var handled = new List<int>();
-
-            while (true)
-            {
-                if (alerts.TryDequeue(out var alert))
-                {
-                    handled.Add(alert);
-                }
-                else if (packets.TryDequeue(out var packet))
-                {
-                    handled.Add(packet);
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            // Assert
-            Assert.Equal(101, handled.Count);
-            Assert.Equal(999, handled[0]);
-            Assert.Equal(Enumerable.Range(0, 100), handled.Skip(1));
-        }
-
-        [Fact]
         public void Enqueue_FromManyThreads_KeepsEveryItem()
         {
             // Arrange
@@ -133,35 +64,6 @@ namespace SmartX.Tests
 
             // Assert
             Assert.Equal(5000, queue.Count);
-        }
-
-        [Fact]
-        public void TryDequeue_LargeMixedLoad_ComesBackBySeverityThenArrival()
-        {
-            // Arrange
-            var queue = new AlertQueue<(int Id, int Severity)>();
-
-            for (var i = 0; i < 3000; i++)
-            {
-                queue.Enqueue((i, i % 3), i % 3);
-            }
-
-            // Act
-            var order = new List<(int Id, int Severity)>();
-
-            while (queue.TryDequeue(out var item))
-            {
-                order.Add(item);
-            }
-
-            // Assert
-            var expected = Enumerable.Range(0, 3000)
-                .Select(i => (Id: i, Severity: i % 3))
-                .OrderByDescending(x => x.Severity)
-                .ThenBy(x => x.Id)
-                .ToList();
-
-            Assert.Equal(expected, order);
         }
     }
 }

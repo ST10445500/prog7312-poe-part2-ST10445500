@@ -111,7 +111,7 @@ else if (_snapshot != null)
                 <StatTile Label="Packets jumped" Value="@_snapshot.PacketsJumped.ToString()" Note="overtaken by alerts" />
             </div>
             <div class="col-6 col-md">
-                <StatTile Label="Suppressed" Value="@_snapshot.SuppressedDuplicates.ToString()" Note="repeat faults not alerted" />
+                <StatTile Label="Suppressed" Value="@_snapshot.SuppressedDuplicates.ToString()" Note="@($"repeat faults not alerted, {_snapshot.SuppressedDisconnects} repeat disconnects")" />
             </div>
             <div class="col-6 col-md">
                 <StatTile Label="Undo stack" Value="@_snapshot.UndoDepth.ToString()" Note="overrides that can be undone" />

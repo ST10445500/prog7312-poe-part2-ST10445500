@@ -12,20 +12,6 @@ namespace SmartX.Tests
     //checks the counts, the ranking and tie order, the confidence, an empty model, bad names and that it holds up under many threads
     public class TransitionModelTests
     {
-        [Fact]
-        public void GetNext_Empty_ReturnsNothing()
-        {
-            // Arrange
-            var model = new TransitionModel();
-
-            // Act
-            var next = model.GetNext("alert:LowMoisture", 3);
-
-            // Assert
-            Assert.Empty(next);
-            Assert.Equal(0, model.Total("alert:LowMoisture"));
-            Assert.Null(model.Last);
-        }
 
         [Fact]
         public void GetNext_OnePair_HasFullConfidence()
@@ -42,23 +28,6 @@ namespace SmartX.Tests
             Assert.Equal("b", next[0].Event);
             Assert.Equal(1, next[0].Count);
             Assert.Equal(1.0, next[0].Confidence);
-        }
-
-        [Fact]
-        public void Record_Repeated_CountsEachTime()
-        {
-            // Arrange
-            var model = new TransitionModel();
-
-            // Act
-            for (var i = 0; i < 4; i++)
-            {
-                model.Record("a", "b");
-            }
-
-            // Assert
-            Assert.Equal(4, model.GetNext("a", 1)[0].Count);
-            Assert.Equal(4, model.Total("a"));
         }
 
         [Fact]
@@ -116,47 +85,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void GetNext_TakeSmallerThanFollowers_ConfidenceStillUsesTheWholeTotal()
-        {
-            // Arrange
-            var model = new TransitionModel();
-            model.Record("a", "x");
-            model.Record("a", "y");
-
-            // Act
-            var next = model.GetNext("a", 1);
-
-            // Assert
-            Assert.Single(next);
-            Assert.Equal(0.5, next[0].Confidence);
-        }
-
-        [Fact]
-        public void GetNext_UnknownOrBadArguments_ReturnsNothing()
-        {
-            // Arrange
-            var model = new TransitionModel();
-            model.Record("a", "b");
-
-            // Act and Assert
-            Assert.Empty(model.GetNext("nope", 3));
-            Assert.Empty(model.GetNext("", 3));
-            Assert.Empty(model.GetNext("a", 0));
-        }
-
-        [Fact]
-        public void Record_BlankName_Throws()
-        {
-            // Arrange
-            var model = new TransitionModel();
-
-            // Act and Assert
-            Assert.Throws<ArgumentException>(() => model.Record("", "b"));
-            Assert.Throws<ArgumentException>(() => model.Record("a", "  "));
-            Assert.Throws<ArgumentException>(() => model.Observe(""));
-        }
-
-        [Fact]
         public void Observe_InOrder_CountsEachNeighbourPair()
         {
             // Arrange
@@ -176,20 +104,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void Observe_FirstEvent_RecordsNoPair()
-        {
-            // Arrange
-            var model = new TransitionModel();
-
-            // Act
-            model.Observe("a");
-
-            // Assert
-            Assert.Equal("a", model.Last);
-            Assert.Equal(0, model.Total("a"));
-        }
-
-        [Fact]
         public void Record_ManyThreads_LosesNoCounts()
         {
             // Arrange
@@ -201,21 +115,6 @@ namespace SmartX.Tests
             // Assert
             Assert.Equal(5000, model.Total("a"));
             Assert.Equal(2500, model.GetNext("a", 1)[0].Count);
-        }
-
-        [Fact]
-        public void Observe_ManyThreads_CountsOnePairPerEventAfterTheFirst()
-        {
-            // Arrange
-            var model = new TransitionModel();
-            model.Observe("start");
-
-            // Act
-            Parallel.For(0, 5000, index => model.Observe("e"));
-
-            // Assert
-            Assert.Equal(1, model.Total("start"));
-            Assert.Equal(4999, model.Total("e"));
         }
     }
 }

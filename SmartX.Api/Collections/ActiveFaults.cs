@@ -8,7 +8,8 @@
 namespace SmartX.Api.Collections
 {
     //keeps the devices that have gone quiet and the faults that are currently active, each in a hash set
-    //adding, removing and checking one entry is O(1), and every member takes the one lock so requests and the processor can share it
+    //adding, removing and checking one entry is O(1), except Report and ClearExcept which walk the active faults to clear a device, and that set stays small
+    //every member takes the one lock so requests and the processor can share it
     public class ActiveFaults
     {
         private readonly HashSet<string> _disconnected = new();
@@ -16,6 +17,7 @@ namespace SmartX.Api.Collections
         private readonly object _lock = new();
 
         private long _suppressed;
+        private long _suppressedDisconnects;
 
         //..............................................................................//
 
@@ -39,6 +41,18 @@ namespace SmartX.Api.Collections
                 lock (_lock)
                 {
                     return _suppressed;
+                }
+            }
+        }
+
+        //retrieves how many repeats of a disconnect were turned away
+        public long SuppressedDisconnectCount
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _suppressedDisconnects;
                 }
             }
         }
@@ -108,12 +122,18 @@ namespace SmartX.Api.Collections
 
         //..............................................................................//
 
-        //marks a device as gone quiet, returning false if it was already marked
+        //marks a device as gone quiet, returning false and counting a suppressed repeat if it was already marked
         public bool MarkDisconnected(string macAddress)
         {
             lock (_lock)
             {
-                return _disconnected.Add(Key(macAddress));
+                if (_disconnected.Add(Key(macAddress)))
+                {
+                    return true;
+                }
+
+                _suppressedDisconnects++;
+                return false;
             }
         }
 

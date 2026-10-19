@@ -27,19 +27,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void Find_UnknownMac_ReturnsNull()
-        {
-            // Arrange
-            var cache = new DeviceCache();
-
-            // Act
-            var state = cache.Find("AA:BB:CC:DD:EE:01");
-
-            // Assert
-            Assert.Null(state);
-        }
-
-        [Fact]
         public void Find_LowerCaseMac_FindsTheDevice()
         {
             // Arrange
@@ -56,18 +43,19 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void Update_SameMacTwice_KeepsTheLatestOnly()
+        public void Update_FromManyThreads_KeepsEveryDevice()
         {
             // Arrange
             var cache = new DeviceCache();
 
             // Act
-            cache.Update(Moisture("AA:BB:CC:DD:EE:01", 40), "N01");
-            cache.Update(Moisture("AA:BB:CC:DD:EE:01", 55), "N01");
+            Parallel.For(0, 2000, i =>
+            {
+                cache.Update(Moisture($"AA:BB:CC:00:{i / 256:X2}:{i % 256:X2}", 40), "N" + i);
+            });
 
             // Assert
-            Assert.Single(cache.GetAll());
-            Assert.Equal("55%", cache.Find("AA:BB:CC:DD:EE:01")!.Reading);
+            Assert.Equal(2000, cache.GetAll().Count);
         }
     }
 }

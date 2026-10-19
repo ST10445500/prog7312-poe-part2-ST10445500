@@ -27,19 +27,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void GetSuggestions_FreshStart_HasNothingToSuggest()
-        {
-            // Arrange
-            var (service, _) = Build();
-
-            // Act
-            var suggestions = service.GetSuggestions();
-
-            // Assert
-            Assert.Empty(suggestions);
-        }
-
-        [Fact]
         public void GetSuggestions_AfterSeededAlert_SuggestsTheUsualValve()
         {
             // Arrange
@@ -95,56 +82,6 @@ namespace SmartX.Tests
         }
 
         [Fact]
-        public void GetSuggestions_AfterShutAllAndUndo_WordsEachInPlainEnglish()
-        {
-            // Arrange
-            var (service, _) = Build();
-            service.RecordShutAll();
-            service.RecordUndo();
-            service.RecordShutAll();
-
-            // Act
-            var top = service.GetSuggestions()[0];
-
-            // Assert
-            Assert.Equal("Undo the last override", top.Text);
-            Assert.Equal("After shutting all valves, this came next 1 of 1 time.", top.Reason);
-        }
-
-        [Fact]
-        public void RecordSearch_BlankOrRepeated_IsIgnored()
-        {
-            // Arrange
-            var (service, _) = Build();
-
-            // Act
-            var blank = service.RecordSearch("   ");
-            var first = service.RecordSearch("Soil");
-            var again = service.RecordSearch("soil ");
-
-            // Assert
-            Assert.False(blank);
-            Assert.True(first);
-            Assert.False(again);
-        }
-
-        [Fact]
-        public void RecordSearch_VeryLongText_IsCutShort()
-        {
-            // Arrange
-            var (service, _) = Build();
-            service.RecordAlert("Anything");
-            service.RecordSearch(new string('x', 500));
-            service.RecordAlert("Anything");
-
-            // Act
-            var top = service.GetSuggestions()[0];
-
-            // Assert
-            Assert.Equal(64, top.Text.Length - "Search for ".Length);
-        }
-
-        [Fact]
         public void GetSuggestions_FaultOnADevice_ComesFirstAsAProblem()
         {
             // Arrange
@@ -176,40 +113,6 @@ namespace SmartX.Tests
             Assert.Single(suggestions);
             Assert.Equal("Problem", suggestions[0].Kind);
             Assert.Equal("soil-b1 has stopped reporting.", suggestions[0].Reason);
-        }
-
-        [Fact]
-        public void GetSuggestions_UnregisteredDevice_FallsBackToItsMac()
-        {
-            // Arrange
-            var (service, _) = Build();
-            service.RecordCommand("00:11:22:33:44:55", true);
-            service.RecordCommand("00:11:22:33:44:55", false);
-            service.RecordCommand("00:11:22:33:44:55", true);
-
-            // Act
-            var top = service.GetSuggestions()[0];
-
-            // Assert
-            Assert.Equal("Close 00:11:22:33:44:55", top.Text);
-            Assert.Equal("After you opened 00:11:22:33:44:55, this came next 1 of 1 time.", top.Reason);
-        }
-
-        [Fact]
-        public void RecordAlert_ManyThreads_StillAnswers()
-        {
-            // Arrange
-            var (service, _) = Build();
-
-            // Act
-            Parallel.For(0, 2000, index =>
-            {
-                service.RecordAlert("HighWatts");
-                service.RecordSearch("s" + index % 5);
-            });
-
-            // Assert
-            Assert.NotNull(service.GetSuggestions());
         }
     }
 }

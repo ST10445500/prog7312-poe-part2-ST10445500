@@ -61,6 +61,7 @@ namespace SmartX.Api.Controllers
                 PacketsJumped = _stats.PacketsJumped,
                 ActiveErrors = _faults.ActiveErrorCount,
                 SuppressedDuplicates = _faults.SuppressedCount,
+                SuppressedDisconnects = _faults.SuppressedDisconnectCount,
                 DisconnectedNodes = _faults.GetDisconnected(),
                 UndoDepth = _history.Count,
                 Devices = Filter(search, category, alertsOnly),
