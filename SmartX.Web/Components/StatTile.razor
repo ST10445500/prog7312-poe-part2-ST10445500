@@ -1,4 +1,4 @@
-<div class="stat-tile">
+<div class="stat-tile" title="@Title">
     <div class="stat-label">@Label</div>
     <div class="stat-value @ValueClass">@Value</div>
     @if (!string.IsNullOrWhiteSpace(Note))
@@ -19,4 +19,8 @@
 
     [Parameter]
     public string ValueClass { get; set; } = string.Empty;
+
+    // Hover text for when the note is cut short.
+    [Parameter]
+    public string? Title { get; set; }
 }

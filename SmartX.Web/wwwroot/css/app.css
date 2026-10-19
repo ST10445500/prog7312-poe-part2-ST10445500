@@ -275,6 +275,211 @@
     color: var(--sx-text-muted);
 }
 
+.stream-toolbar {
+    position: sticky;
+    top: 4.4rem;
+    z-index: 10;
+    padding: 0.75rem 1rem;
+    background-color: var(--sx-surface);
+    border: 1px solid var(--sx-border);
+    border-radius: var(--sx-radius);
+    box-shadow: var(--sx-shadow);
+}
+
+/* The command stream page is wider than the rest, to fit the side panels next to the table. */
+body:has(.stream-page) .sx-container {
+    max-width: 1480px;
+}
+
+.stream-page {
+    display: flex;
+    flex-direction: column;
+}
+
+/* On a narrow screen the toolbar, then the panels, then the rest, so the suggestions are not buried under the table. */
+.stream-main {
+    display: contents;
+}
+
+.stream-toolbar {
+    order: 0;
+}
+
+.stream-side {
+    order: 1;
+    margin-bottom: 1.5rem;
+}
+
+.stream-body {
+    order: 2;
+    min-width: 0;
+}
+
+.side-card {
+    min-height: 7rem;
+}
+
+.side-list {
+    max-height: 8rem;
+    overflow-y: auto;
+}
+
+@media (min-width: 1200px) {
+    .stream-page {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 22rem;
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    .stream-main {
+        display: block;
+        min-width: 0;
+    }
+
+    /* Stays in view while the table scrolls, and scrolls inside itself when the lists are long. */
+    .stream-side {
+        position: sticky;
+        top: 4.4rem;
+        max-height: calc(100vh - 5.4rem);
+        margin-bottom: 0;
+        overflow-y: auto;
+    }
+
+    .side-list {
+        max-height: 18rem;
+    }
+}
+
+/* Fixed columns, so a longer value or a new chip does not make the table reflow. */
+.stream-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.stream-table .col-arrow { width: 3rem; }
+.stream-table .col-latest { width: 15%; }
+.stream-table .col-signal { width: 20%; }
+.stream-table .col-seen { width: 13%; }
+.stream-table .col-valve { width: 9.5rem; }
+
+.stream-table td {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Each cell is a line or two that is cut with dots, so nothing ever pushes the table wider than its box. */
+.cell-device,
+.stream-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cell-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-row {
+    cursor: pointer;
+}
+
+.cell-arrow {
+    padding-right: 0;
+}
+
+.arrow-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    color: var(--sx-text-muted);
+}
+
+.arrow-button:hover {
+    background-color: rgba(var(--sx-accent-rgb), 0.1);
+    color: var(--sx-accent);
+}
+
+/* A small chevron drawn from borders, it turns down when the history is open. */
+.arrow {
+    display: block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+}
+
+.arrow-open {
+    transform: rotate(45deg);
+}
+
+@media (max-width: 575.98px) {
+    .stream-table .col-latest { width: 28%; }
+    .stream-table .col-valve { width: 8.5rem; }
+}
+
+/* The open history row has nothing to hover. */
+[data-bs-theme=light] .table-hover > tbody > tr.history-row:hover > * {
+    background-color: transparent;
+}
+
+.history-card {
+    scroll-margin-top: 9rem;
+}
+
+.history-card:focus {
+    outline: none;
+}
+
+.stream-page .stat-note {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stream-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    z-index: 30;
+    width: max-content;
+    max-width: min(32rem, calc(100vw - 2rem));
+    margin: 0;
+    transform: translateX(-50%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+.section-title {
+    margin-bottom: 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--sx-text-muted);
+}
+
+@media (max-width: 575.98px) {
+    .stat-tile {
+        padding: 0.9rem 1rem;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+}
+
 .field-name {
     max-width: 220px;
 }

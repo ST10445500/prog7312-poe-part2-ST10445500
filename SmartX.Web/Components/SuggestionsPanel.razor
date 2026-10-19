@@ -1,4 +1,4 @@
-<div class="card mb-3">
+<div class="card side-card">
     <div class="card-body">
         <h2 class="h6 mb-2">Suggested actions</h2>
 
@@ -16,7 +16,7 @@
         }
         else
         {
-            <ul class="list-group list-group-flush">
+            <ul class="list-group list-group-flush side-list">
                 @foreach (var suggestion in Suggestions)
                 {
                     <li class="list-group-item px-0">
@@ -26,10 +26,10 @@
                                 @suggestion.Text
                                 <span class="text-muted small ms-1">@((suggestion.Confidence * 100).ToString("0"))% sure</span>
                             </span>
-                            @if (suggestion.MacAddress != null && suggestion.Open != null)
+                            @if (ActionLabel(suggestion) is { } label)
                             {
-                                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@Disabled"
-                                        @onclick="() => OnApply.InvokeAsync(suggestion)">@(suggestion.Open == true ? "Open" : "Close")</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" disabled="@(Disabled && ChangesValves(suggestion))"
+                                        @onclick="() => OnApply.InvokeAsync(suggestion)">@label</button>
                             }
                         </div>
                         <div class="small text-muted">@suggestion.Reason</div>
@@ -53,4 +53,36 @@
 
     [Parameter]
     public EventCallback<Suggestion> OnApply { get; set; }
+
+    // Says what the button does, or null when the suggestion is only a heads-up.
+    private static string? ActionLabel(Suggestion suggestion)
+    {
+        if (suggestion.MacAddress != null && suggestion.Open != null)
+        {
+            return suggestion.Open == true ? "Open" : "Close";
+        }
+
+        if (suggestion.Kind == "Problem" && suggestion.MacAddress != null)
+        {
+            return "History";
+        }
+
+        if (suggestion.Event == "command:shutall")
+        {
+            return "Shut all";
+        }
+
+        if (suggestion.Event == "command:undo")
+        {
+            return "Undo";
+        }
+
+        return suggestion.Event.StartsWith("search:") ? "Search" : null;
+    }
+
+    // Looking at history or searching works with the api down, a valve change does not.
+    private static bool ChangesValves(Suggestion suggestion)
+    {
+        return suggestion.Kind != "Problem" && !suggestion.Event.StartsWith("search:");
+    }
 }

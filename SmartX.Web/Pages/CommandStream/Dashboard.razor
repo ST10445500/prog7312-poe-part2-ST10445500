@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject DashboardState State
 @inject IConfiguration Config
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Command Stream - Smart-X</PageTitle>
@@ -23,37 +24,46 @@
     </div>
 }
 
-<div class="row g-2 mb-3 align-items-center">
-    <div class="col-12 col-md">
-        <input class="form-control font-monospace" placeholder="Search by MAC address" @bind="State.SearchText" @bind:event="oninput" />
-    </div>
-    <div class="col-6 col-md-auto">
-        <select class="form-select" @bind="CategoryText">
-            <option value="">All categories</option>
-            @foreach (var category in Enum.GetValues<SensorCategory>())
-            {
-                <option value="@category">@category</option>
-            }
-        </select>
-    </div>
-    <div class="col-6 col-md-auto">
-        <div class="form-check">
-            <input id="alertsOnly" class="form-check-input" type="checkbox" @bind="State.AlertsOnly" />
-            <label class="form-check-label" for="alertsOnly">Alerts only</label>
+<div class="stream-page">
+<div class="stream-main">
+<div class="stream-toolbar mb-3">
+    <div class="row g-2 align-items-center">
+        <div class="col-12 col-md">
+            <input class="form-control font-monospace" placeholder="Search by MAC address, part of one is fine" @bind="State.SearchText" @bind:event="oninput" />
         </div>
-    </div>
-    <div class="col-12 col-md-auto">
-        @if (State.Connected)
-        {
-            <span class="badge text-bg-success">Live</span>
-        }
-        else
-        {
-            <span class="badge text-bg-secondary">Polling</span>
-        }
+        <div class="col-6 col-md-auto">
+            <select class="form-select" @bind="CategoryText">
+                <option value="">All categories</option>
+                @foreach (var category in Enum.GetValues<SensorCategory>())
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-auto">
+            <div class="form-check">
+                <input id="alertsOnly" class="form-check-input" type="checkbox" @bind="State.AlertsOnly" />
+                <label class="form-check-label" for="alertsOnly">Alerts only</label>
+            </div>
+        </div>
+        <div class="col-12 col-md-auto d-flex align-items-center gap-2">
+            @if (FiltersSet)
+            {
+                <button type="button" class="btn btn-link btn-sm p-0" @onclick="ClearFilters">Clear filters</button>
+            }
+            @if (State.Connected)
+            {
+                <span class="badge text-bg-success" title="The gateway pushes changes as they happen.">Live</span>
+            }
+            else
+            {
+                <span class="badge text-bg-secondary" title="Asking the gateway for updates every second or so.">Polling</span>
+            }
+        </div>
     </div>
 </div>
 
+<div class="stream-body">
 @if (_snapshot == null && !_loadFailed)
 {
     <div class="text-center text-muted py-4">
@@ -63,64 +73,53 @@
 }
 else if (_snapshot != null)
 {
-    <div class="row g-3 mb-3">
-        <div class="col-6 col-md-3">
-            <StatTile Label="Queue depth" Value="@_snapshot.QueueDepth.ToString()" Note="packets waiting" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Alert queue" Value="@_snapshot.AlertDepth.ToString()" Note="alerts waiting" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Alerts raised" Value="@_snapshot.AlertsRaised.ToString()" Note="since the api started" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Packets jumped" Value="@_snapshot.PacketsJumped.ToString()" Note="overtaken by alerts" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Active faults" Value="@_snapshot.ActiveErrors.ToString()" Note="reported and not cleared" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Suppressed" Value="@_snapshot.SuppressedDuplicates.ToString()" Note="repeat faults not alerted" />
-        </div>
-        <div class="col-6 col-md-3">
-            <StatTile Label="Disconnected" Value="@_snapshot.DisconnectedNodes.Count.ToString()" Note="gone quiet" />
-        </div>
+    <div class="row g-3 mb-2">
         <div class="col-6 col-md-3">
             <StatTile Label="Devices" Value="@_snapshot.Devices.Count.ToString()" Note="seen on the stream" />
         </div>
         <div class="col-6 col-md-3">
-            <StatTile Label="Undo stack" Value="@_snapshot.UndoDepth.ToString()" Note="overrides that can be undone" />
+            <StatTile Label="Queue depth" Value="@_snapshot.QueueDepth.ToString()" Note="packets waiting" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Active faults" Value="@_snapshot.ActiveErrors.ToString()" Note="reported and not cleared"
+                      ValueClass="@(_snapshot.ActiveErrors > 0 ? "stat-value-fault" : string.Empty)" />
+        </div>
+        <div class="col-6 col-md-3">
+            <StatTile Label="Disconnected" Value="@_snapshot.DisconnectedNodes.Count.ToString()"
+                      Note="@(_snapshot.DisconnectedNodes.Count == 0 ? "gone quiet" : string.Join(", ", _snapshot.DisconnectedNodes.Select(NameFor)))"
+                      Title="@(_snapshot.DisconnectedNodes.Count == 0 ? null : "No packets from " + string.Join(", ", _snapshot.DisconnectedNodes))"
+                      ValueClass="@(_snapshot.DisconnectedNodes.Count > 0 ? "stat-value-warn" : string.Empty)" />
         </div>
     </div>
 
-    @if (_snapshot.DisconnectedNodes.Count > 0)
-    {
-        <div class="alert alert-warning">No packets from @string.Join(", ", _snapshot.DisconnectedNodes).</div>
-    }
-
-    @if (_commandMessage != null)
-    {
-        <div class="alert @(_commandFailed ? "alert-danger" : "alert-success")">@_commandMessage</div>
-    }
-
     <div class="mb-3">
-        <BusyButton CssClass="btn btn-outline-secondary btn-sm"
-                    Label="Undo last override"
-                    BusyLabel="Undoing..."
-                    Busy="_isSending"
-                    Disabled="_loadFailed"
-                    OnClick="UndoAsync" />
-        <BusyButton CssClass="btn btn-outline-danger btn-sm ms-2"
-                    Label="Shut all valves"
-                    BusyLabel="Closing..."
-                    Busy="_isSending"
-                    Disabled="_loadFailed"
-                    OnClick="ShutAllAsync" />
+        <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => _showMoreStats = !_showMoreStats">
+            @(_showMoreStats ? "Fewer stats" : "More stats")
+        </button>
     </div>
 
-    <SuggestionsPanel Suggestions="_suggestions" Failed="_suggestionsFailed" Disabled="_loadFailed || _isSending" OnApply="ApplySuggestionAsync" />
+    @if (_showMoreStats)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md">
+                <StatTile Label="Alert queue" Value="@_snapshot.AlertDepth.ToString()" Note="alerts waiting" />
+            </div>
+            <div class="col-6 col-md">
+                <StatTile Label="Alerts raised" Value="@_snapshot.AlertsRaised.ToString()" Note="since the api started" />
+            </div>
+            <div class="col-6 col-md">
+                <StatTile Label="Packets jumped" Value="@_snapshot.PacketsJumped.ToString()" Note="overtaken by alerts" />
+            </div>
+            <div class="col-6 col-md">
+                <StatTile Label="Suppressed" Value="@_snapshot.SuppressedDuplicates.ToString()" Note="repeat faults not alerted" />
+            </div>
+            <div class="col-6 col-md">
+                <StatTile Label="Undo stack" Value="@_snapshot.UndoDepth.ToString()" Note="overrides that can be undone" />
+            </div>
+        </div>
+    }
 
-    <UndoPanel Commands="_commands" Failed="_commandsFailed" />
+    <h2 class="section-title">Devices (@_snapshot.Devices.Count)</h2>
 
     @if (_snapshot.Devices.Count == 0)
     {
@@ -143,120 +142,187 @@ else if (_snapshot != null)
     }
     else
     {
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th>Device</th>
-                        <th>Mac Address</th>
-                        <th>Latest</th>
-                        <th>RSSI</th>
-                        <th>Hops</th>
-                        <th>Protocol</th>
-                        <th>Last seen</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var device in _snapshot.Devices)
-                    {
-                        <tr>
-                            <td>@device.Name</td>
-                            <td class="font-monospace">@device.MacAddress</td>
-                            <td class="font-monospace">@device.Reading</td>
-                            <td>@(device.Radio.Rssi?.ToString() ?? "-") dBm</td>
-                            <td>@(device.Radio.HopCount?.ToString() ?? "-")</td>
-                            <td>@(device.Radio.Protocol ?? "-")</td>
-                            <td class="text-muted small">@device.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        @onclick="() => ShowHistoryAsync(device.MacAddress)">History</button>
-                                @if (device.Category == SensorCategory.Actuator)
+        @* No scrolling wrapper on purpose, the columns shrink and the smaller ones drop away on a narrow screen. *@
+        <table class="table table-hover align-middle stream-table">
+            <thead>
+                <tr>
+                    <th class="col-arrow"></th>
+                    <th class="col-device">Device</th>
+                    <th class="col-latest">Latest</th>
+                    <th class="col-signal d-none d-sm-table-cell">Signal</th>
+                    <th class="col-seen d-none d-md-table-cell">Last seen</th>
+                    <th class="col-valve">Valve</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var device in _snapshot.Devices)
+                {
+                    var isOpen = device.MacAddress == _historyMac;
+
+                    @* The whole row opens the history. The arrow is the same thing for a keyboard. *@
+                    <tr class="device-row @(isOpen ? "table-active" : string.Empty)" @onclick="() => ShowHistoryAsync(device.MacAddress)">
+                        <td class="cell-arrow">
+                            <button type="button" class="arrow-button" aria-expanded="@(isOpen ? "true" : "false")"
+                                    aria-label="@((isOpen ? "Hide history for " : "Show history for ") + device.Name)"
+                                    @onclick="() => ShowHistoryAsync(device.MacAddress)" @onclick:stopPropagation="true">
+                                <span class="arrow @(isOpen ? "arrow-open" : string.Empty)"></span>
+                            </button>
+                        </td>
+                        <td class="cell-device">
+                            <div class="cell-line">
+                                <span class="device-name">@device.Name</span>
+                                @if (device.Disconnected)
                                 {
-                                    <button type="button" class="btn btn-sm btn-primary" disabled="@(_isSending || _loadFailed)"
-                                            @onclick="() => SendAsync(device.MacAddress, true)">Open</button>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(_isSending || _loadFailed)"
-                                            @onclick="() => SendAsync(device.MacAddress, false)">Close</button>
+                                    <span class="status-chip status-chip-silent ms-1">Quiet</span>
                                 }
+                                @foreach (var fault in device.Faults)
+                                {
+                                    <span class="status-chip status-chip-spike ms-1">@fault</span>
+                                }
+                            </div>
+                            <div class="cell-line small text-muted font-monospace">@device.MacAddress</div>
+                        </td>
+                        <td class="font-monospace">@device.Reading</td>
+                        <td class="d-none d-sm-table-cell">
+                            <div class="cell-line">@(device.Radio.Rssi?.ToString() ?? "-") dBm</div>
+                            <div class="cell-line small text-muted">@(device.Radio.Protocol ?? "-"), @(device.Radio.HopCount?.ToString() ?? "-") @(device.Radio.HopCount == 1 ? "hop" : "hops")</div>
+                        </td>
+                        <td class="text-muted small d-none d-md-table-cell">@device.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
+                        <td class="text-end">
+                            @if (device.Category == SensorCategory.Actuator)
+                            {
+                                @* The filled side is where the valve is now. Clicking here never opens the history. *@
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Override valve @device.Name">
+                                    <button type="button" class="btn @(device.State == true ? "btn-primary" : "btn-outline-primary")" disabled="@(_isSending || _loadFailed)"
+                                            @onclick="() => SendAsync(device.MacAddress, true)" @onclick:stopPropagation="true">Open</button>
+                                    <button type="button" class="btn @(device.State == false ? "btn-primary" : "btn-outline-primary")" disabled="@(_isSending || _loadFailed)"
+                                            @onclick="() => SendAsync(device.MacAddress, false)" @onclick:stopPropagation="true">Close</button>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                    @if (isOpen)
+                    {
+                        <tr class="history-row">
+                            <td colspan="6" class="p-0 border-0">
+                                @HistoryCard
                             </td>
                         </tr>
                     }
-                </tbody>
-            </table>
-        </div>
+                }
+            </tbody>
+        </table>
     }
 
-    @if (_historyMac != null)
+    @* A filter can hide the open device, and then the card has no row to sit under. *@
+    @if (_historyMac != null && !_snapshot.Devices.Any(d => d.MacAddress == _historyMac))
     {
-        <div class="card mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h2 class="h6 mb-0">History for <span class="font-monospace">@_historyMac</span></h2>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseHistory">Close</button>
-                </div>
-
-                <div class="btn-group btn-group-sm mb-2" role="group" aria-label="History range">
-                    @foreach (var (minutes, label) in HistoryRanges)
-                    {
-                        <button type="button" class="btn @(State.HistoryMinutes == minutes ? "btn-primary" : "btn-outline-primary")"
-                                @onclick="() => ChooseRange(minutes)">@label</button>
-                    }
-                </div>
-
-                @if (_historyFailed)
-                {
-                    <div class="alert alert-danger mb-0">Could not load the history for this device.</div>
-                }
-                else if (_history == null)
-                {
-                    <div class="text-muted">Loading...</div>
-                }
-                else if (_history.Count == 0)
-                {
-                    <div class="text-muted">
-                        @(State.HistoryMinutes == 0 ? "No readings kept for this device yet." : "No readings in this range.")
-                    </div>
-                }
-                else
-                {
-                    <div class="mb-2 text-primary">
-                        <TimelineChart Points="_history" />
-                    </div>
-                    <div class="small text-muted mb-2">Newest @Math.Min(_history.Count, HistoryRows) of @_history.Count in this range.</div>
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Recorded</th>
-                                    <th>Reading</th>
-                                    <th>RSSI</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var point in _history.AsEnumerable().Reverse().Take(HistoryRows))
-                                {
-                                    <tr>
-                                        <td class="text-muted small">@point.RecordedAt.ToLocalTime().ToString("HH:mm:ss")</td>
-                                        <td class="font-monospace">@point.Reading</td>
-                                        <td>@(point.Rssi?.ToString() ?? "-") dBm</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-        </div>
+        @HistoryCard
     }
+}
+</div>
+</div>
+
+<aside class="stream-side">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <BusyButton CssClass="btn btn-outline-secondary btn-sm"
+                    Label="Undo last override"
+                    BusyLabel="Undoing..."
+                    Busy="_isSending"
+                    Disabled="_loadFailed"
+                    OnClick="UndoAsync" />
+        <BusyButton CssClass="btn btn-outline-danger btn-sm"
+                    Label="Shut all valves"
+                    BusyLabel="Closing..."
+                    Busy="_isSending"
+                    Disabled="_loadFailed"
+                    OnClick="ShutAllAsync" />
+    </div>
+
+    <div class="mb-3">
+        <SuggestionsPanel Suggestions="_suggestions" Failed="_suggestionsFailed" Disabled="_loadFailed || _isSending" OnApply="ApplySuggestionAsync" />
+    </div>
+    <UndoPanel Commands="_commands" Failed="_commandsFailed" />
+</aside>
+</div>
+
+@* Sits over the page, so a message arriving never pushes the table down. *@
+@if (_commandMessage != null)
+{
+    <div class="stream-toast alert @(_commandFailed ? "alert-danger" : "alert-success") shadow" role="status">@_commandMessage</div>
 }
 
 @code {
+    // The history for the open device, drawn under its row or below the table.
+    private RenderFragment HistoryCard => @<div class="card mb-3 history-card" tabindex="-1" @ref="_historyCard">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 mb-0">History for <span class="font-monospace">@_historyMac</span></h2>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseHistory">Close</button>
+            </div>
+
+            <div class="btn-group btn-group-sm mb-2" role="group" aria-label="History range">
+                @foreach (var (minutes, label) in HistoryRanges)
+                {
+                    <button type="button" class="btn @(State.HistoryMinutes == minutes ? "btn-primary" : "btn-outline-primary")"
+                            @onclick="() => ChooseRange(minutes)">@label</button>
+                }
+            </div>
+
+            @if (_historyFailed)
+            {
+                <div class="alert alert-danger mb-0">Could not load the history for this device.</div>
+            }
+            else if (_history == null)
+            {
+                <div class="text-muted">Loading...</div>
+            }
+            else if (_history.Count == 0)
+            {
+                <div class="text-muted">
+                    @(State.HistoryMinutes == 0 ? "No readings kept for this device yet." : "No readings in this range.")
+                </div>
+            }
+            else
+            {
+                <div class="mb-2 text-primary">
+                    <TimelineChart Points="_history" />
+                </div>
+                <div class="small text-muted mb-2">Newest @Math.Min(_history.Count, HistoryRows) of @_history.Count in this range.</div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Recorded</th>
+                                <th>Reading</th>
+                                <th>RSSI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var point in _history.AsEnumerable().Reverse().Take(HistoryRows))
+                            {
+                                <tr>
+                                    <td class="text-muted small">@point.RecordedAt.ToLocalTime().ToString("HH:mm:ss")</td>
+                                    <td class="font-monospace">@point.Reading</td>
+                                    <td>@(point.Rssi?.ToString() ?? "-") dBm</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>;
+
     private const int DefaultPollMilliseconds = 1000;
     private const int LowestPollMilliseconds = 250;
 
     // How long a call may take before the page counts the api as unreachable. Hard coded for now.
     private const int RequestTimeoutMilliseconds = 5000;
     private const int HistoryRows = 15;
+
+    // How long a message stays up.
+    private const int MessageMilliseconds = 8000;
 
     // Minutes back from now, where 0 means everything the log kept.
     private static readonly (int Minutes, string Label)[] HistoryRanges =
@@ -272,6 +338,8 @@ else if (_snapshot != null)
     private bool _loadFailed;
     private CancellationTokenSource? _polling;
 
+    private bool _showMoreStats;
+
     private bool _isSending;
     private bool _commandFailed;
     private string? _commandMessage;
@@ -286,11 +354,28 @@ else if (_snapshot != null)
     private List<HistoryPoint>? _history;
     private bool _historyFailed;
 
+    // Set when a card is opened, so the page brings it into view once it has drawn.
+    private ElementReference _historyCard;
+    private bool _focusHistory;
+    private IJSObjectReference? _scroll;
+
+    private CancellationTokenSource? _messageTimeout;
+
     // The select works in text, the state holds the category itself.
     private string CategoryText
     {
         get => State.Category?.ToString() ?? string.Empty;
         set => State.Category = Enum.TryParse<SensorCategory>(value, out var category) ? category : null;
+    }
+
+    private bool FiltersSet => !string.IsNullOrWhiteSpace(State.SearchText) || State.Category != null || State.AlertsOnly;
+
+    // Each setter only raises a change when its value really moves, so this reloads at most three times.
+    private void ClearFilters()
+    {
+        State.SearchText = string.Empty;
+        State.Category = null;
+        State.AlertsOnly = false;
     }
 
     protected override async Task OnInitializedAsync()
@@ -411,21 +496,94 @@ else if (_snapshot != null)
     // A suggestion goes out as an ordinary override, so the message, the undo stack and the engine all see it the usual way.
     private async Task ApplySuggestionAsync(Suggestion suggestion)
     {
-        if (suggestion.MacAddress == null || suggestion.Open == null)
+        // The event says what the suggestion is, a valve to switch, shut all, undo, a search to repeat or a device to look at.
+        if (suggestion.MacAddress != null && suggestion.Open != null)
         {
-            return;
+            await SendAsync(suggestion.MacAddress, suggestion.Open.Value);
         }
-
-        await SendAsync(suggestion.MacAddress, suggestion.Open.Value);
+        else if (suggestion.Kind == "Problem" && suggestion.MacAddress != null)
+        {
+            await ShowHistoryAsync(suggestion.MacAddress);
+        }
+        else if (suggestion.Event == "command:shutall")
+        {
+            await ShutAllAsync();
+        }
+        else if (suggestion.Event == "command:undo")
+        {
+            await UndoAsync();
+        }
+        else if (suggestion.Event.StartsWith("search:"))
+        {
+            State.SearchText = suggestion.Event["search:".Length..];
+        }
     }
 
     private async Task ShowHistoryAsync(string macAddress)
     {
+        // A second click on the open device hides it.
+        if (macAddress == _historyMac)
+        {
+            CloseHistory();
+            return;
+        }
+
         _historyMac = macAddress;
         _history = null;
         _historyFailed = false;
+        _focusHistory = true;
 
         await LoadHistoryAsync();
+    }
+
+    // Scrolls to the card and focuses it for keyboard users, the css margin keeps it clear of the sticky bars.
+    // It waits for the readings, because a card still saying Loading is short and the page cannot scroll far enough yet.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusHistory && _historyMac != null && _historyCard.Id != null && (_history != null || _historyFailed))
+        {
+            _focusHistory = false;
+
+            try
+            {
+                await _historyCard.FocusAsync(preventScroll: true);
+
+                _scroll ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/scroll.js");
+                await _scroll.InvokeVoidAsync("scrollToElement", _historyCard);
+            }
+            catch (JSException ex)
+            {
+                // The card is still on the page, only the scroll is lost.
+                Console.WriteLine($"Could not scroll to the history: {ex.Message}");
+            }
+        }
+    }
+
+    // Names a quiet device for the tile, or gives its mac when a filter has hidden it from the list.
+    private string NameFor(string macAddress)
+    {
+        return _snapshot?.Devices.FirstOrDefault(d => d.MacAddress == macAddress)?.Name ?? macAddress;
+    }
+
+    // Takes the message down after a while, a newer message restarts the wait.
+    private async Task ClearMessageLaterAsync()
+    {
+        _messageTimeout?.Cancel();
+        _messageTimeout?.Dispose();
+
+        var source = new CancellationTokenSource();
+        _messageTimeout = source;
+
+        try
+        {
+            await Task.Delay(MessageMilliseconds, source.Token);
+
+            _commandMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private void CloseHistory()
@@ -533,6 +691,8 @@ else if (_snapshot != null)
             await LoadSnapshotAsync();
             await LoadCommandsAsync();
             await LoadSuggestionsAsync();
+
+            _ = ClearMessageLaterAsync();
         }
         catch (Exception ex) when (IsRequestFailure(ex))
         {
@@ -541,6 +701,8 @@ else if (_snapshot != null)
                 ? "The gateway did not answer in time. The override may still have gone through, check before sending it again."
                 : "Could not reach the gateway API.";
             _commandFailed = true;
+
+            _ = ClearMessageLaterAsync();
         }
         finally
         {
@@ -560,5 +722,12 @@ else if (_snapshot != null)
         State.OnStreamChanged -= OnStateChanged;
         _polling?.Cancel();
         _polling?.Dispose();
+        _messageTimeout?.Cancel();
+        _messageTimeout?.Dispose();
+
+        if (_scroll != null)
+        {
+            _ = _scroll.DisposeAsync().AsTask();
+        }
     }
 }
