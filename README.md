@@ -668,7 +668,7 @@ The live updates use a SignalR hub at `/hubs/stream`. The OpenAPI document is at
 
 ## Demo
 
-Video walkthrough: *add the Part 2 video link here*
+Video walkthrough: https://youtu.be/1GeMPZxtRro 
 
 ---
 
